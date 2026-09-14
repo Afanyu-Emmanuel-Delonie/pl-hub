@@ -30,7 +30,7 @@ export default function NewQuizPage() {
       deadline,
       groups,
       questions,
-      closed: false,
+      closedGroups: [],
       createdAt: new Date().toISOString(),
     };
 

@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { CodeBlock } from "@/components/ui/CodeBlock";
-import { ASSIGNMENTS, ASSIGNMENT_SUBMISSIONS, GROUPS } from "@/lib/mock-data";
+import { ASSIGNMENTS, ASSIGNMENT_SUBMISSIONS, setAssignmentClosedGroups } from "@/lib/mock-data";
+import { coveredGroups, deadlineForGroup, isAssignmentOpen, isClosedForGroup } from "@/lib/assignments";
 import type { AssignmentSubmission } from "@/lib/types";
 import { formatDate, formatDeadline, isPast } from "@/lib/format";
 
@@ -146,6 +147,7 @@ function GradeCard({ submission }: { submission: AssignmentSubmission }) {
 export default function AssignmentDetailPage() {
   const params = useParams<{ id: string }>();
   const [tab, setTab] = useState<Tab>("details");
+  const [, forceUpdate] = useState(0);
 
   const assignment = useMemo(
     () => ASSIGNMENTS.find((a) => a.id === params.id),
@@ -168,6 +170,16 @@ export default function AssignmentDetailPage() {
   }
 
   const graded = submissions.filter((s) => s.graded).length;
+  const isClosed = !isAssignmentOpen(assignment);
+  const groups = coveredGroups(assignment);
+
+  function toggleGroup(group: string) {
+    const closedGroups = assignment!.closedGroups.includes(group)
+      ? assignment!.closedGroups.filter((g) => g !== group)
+      : [...assignment!.closedGroups, group];
+    setAssignmentClosedGroups(assignment!.id, closedGroups);
+    forceUpdate((n) => n + 1);
+  }
 
   return (
     <div>
@@ -188,6 +200,9 @@ export default function AssignmentDetailPage() {
             <span>{submissions.length} submissions</span>
             <span>·</span>
             <span>{graded} graded</span>
+            <Badge variant={isClosed ? "neutral" : "brand"} dot>
+              {isClosed ? "Closed" : "Open"}
+            </Badge>
           </div>
         </div>
         <Link href={`/admin/assignments/${assignment.id}/edit`} className="self-start">
@@ -240,23 +255,39 @@ export default function AssignmentDetailPage() {
 
           {/* Deadlines */}
           <Card className="px-5 py-5">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
               Deadlines
             </h2>
-            <ul className="space-y-2">
-              {assignment.deadlines.map((d, i) => {
-                const closed = isPast(d.deadline);
+            <p className="mb-3 mt-1 text-xs text-slate-400">
+              Click a group to close or reopen its access early.
+            </p>
+            <ul className="space-y-1">
+              {groups.map((g) => {
+                const deadline = deadlineForGroup(assignment, g);
+                const pastDeadline = Boolean(deadline && isPast(deadline));
+                const closed = isClosedForGroup(assignment, g);
+                const closedEarly = assignment.closedGroups.includes(g) && !pastDeadline;
                 return (
-                  <li key={i} className="flex items-center justify-between text-sm">
-                    <span className="text-slate-600">
-                      {d.groups.length === GROUPS.length ? "All groups" : d.groups.join(", ")}
-                    </span>
-                    <span className="flex items-center gap-3">
-                      <span className="text-slate-500">{formatDeadline(d.deadline)}</span>
-                      <Badge variant={closed ? "neutral" : "brand"}>
-                        {closed ? "Closed" : "Open"}
-                      </Badge>
-                    </span>
+                  <li key={g}>
+                    <button
+                      type="button"
+                      disabled={pastDeadline}
+                      onClick={() => toggleGroup(g)}
+                      className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors ${
+                        pastDeadline ? "cursor-default" : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="text-slate-600">{g}</span>
+                      <span className="flex items-center gap-3">
+                        <span className="text-slate-500">
+                          {deadline ? formatDeadline(deadline) : "—"}
+                        </span>
+                        {closedEarly && <Badge variant="warning">Closed early</Badge>}
+                        <Badge variant={closed ? "neutral" : "brand"}>
+                          {closed ? "Closed" : "Open"}
+                        </Badge>
+                      </span>
+                    </button>
                   </li>
                 );
               })}

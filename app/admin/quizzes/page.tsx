@@ -3,7 +3,8 @@ import { Card } from "@/components/ui/Card";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Badge } from "@/components/ui/Badge";
 import { QUIZZES, QUIZ_RESPONSES } from "@/lib/mock-data";
-import { formatDeadline, isPast } from "@/lib/format";
+import { isQuizOpen } from "@/lib/quizzes";
+import { formatDeadline } from "@/lib/format";
 
 export default function QuizzesPage() {
   return (
@@ -34,7 +35,7 @@ export default function QuizzesPage() {
           <tbody>
             {QUIZZES.map((quiz) => {
               const responses = QUIZ_RESPONSES.filter((r) => r.quizId === quiz.id);
-              const closed = quiz.closed || isPast(quiz.deadline);
+              const closed = !isQuizOpen(quiz);
               return (
                 <tr key={quiz.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-5 py-4">
@@ -66,7 +67,7 @@ export default function QuizzesPage() {
         <div className="divide-y divide-slate-50 md:hidden">
           {QUIZZES.map((quiz) => {
             const responses = QUIZ_RESPONSES.filter((r) => r.quizId === quiz.id);
-            const closed = quiz.closed || isPast(quiz.deadline);
+            const closed = !isQuizOpen(quiz);
             return (
               <Link
                 key={quiz.id}

@@ -10,11 +10,12 @@ import {
 } from "@/lib/mock-data";
 import { computeLeaderboard } from "@/lib/rankings";
 import { isAssignmentOpen } from "@/lib/assignments";
-import { formatDate, isPast } from "@/lib/format";
+import { isQuizOpen } from "@/lib/quizzes";
+import { formatDate } from "@/lib/format";
 
 export default function AdminOverviewPage() {
   const activeAssignments = ASSIGNMENTS.filter(isAssignmentOpen).length;
-  const activeQuizzes = QUIZZES.filter((q) => !isPast(q.deadline)).length;
+  const activeQuizzes = QUIZZES.filter(isQuizOpen).length;
   const pending = ASSIGNMENT_SUBMISSIONS.filter((s) => !s.graded);
 
   const gradedPercents = [

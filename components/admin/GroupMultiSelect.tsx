@@ -5,9 +5,13 @@ import { GROUPS } from "@/lib/mock-data";
 export function GroupMultiSelect({
   selected,
   onChange,
+  options = GROUPS,
+  variant = "default",
 }: {
   selected: string[];
   onChange: (groups: string[]) => void;
+  options?: string[];
+  variant?: "default" | "danger";
 }) {
   function toggle(group: string) {
     if (selected.includes(group)) {
@@ -17,9 +21,14 @@ export function GroupMultiSelect({
     }
   }
 
+  const activeClasses =
+    variant === "danger"
+      ? "border-rose-400 bg-rose-50 text-rose-600"
+      : "border-brand bg-brand-tint text-brand";
+
   return (
     <div className="flex flex-wrap gap-2">
-      {GROUPS.map((group) => {
+      {options.map((group) => {
         const active = selected.includes(group);
         return (
           <button
@@ -27,9 +36,7 @@ export function GroupMultiSelect({
             key={group}
             onClick={() => toggle(group)}
             className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-              active
-                ? "border-brand bg-brand-tint text-brand"
-                : "border-slate-200 text-slate-600 hover:bg-slate-50"
+              active ? activeClasses : "border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
             {group}
