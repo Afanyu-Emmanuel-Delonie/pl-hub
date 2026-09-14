@@ -39,6 +39,7 @@ export default function NewQuizPage() {
       questions,
       closedGroups: [],
       createdAt: new Date().toISOString(),
+      started: false,
     };
 
     addQuiz(quiz);

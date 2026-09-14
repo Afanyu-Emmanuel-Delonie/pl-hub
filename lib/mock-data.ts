@@ -260,6 +260,7 @@ export const QUIZZES: Quiz[] = [
     groups: [],
     closedGroups: [],
     createdAt: "2026-09-01T09:00:00",
+    started: true,
     questions: [
       {
         id: "q1-1",
@@ -286,6 +287,7 @@ export const QUIZZES: Quiz[] = [
     groups: [],
     closedGroups: [],
     createdAt: "2026-09-11T09:00:00",
+    started: true,
     questions: [
       {
         id: "q2-1",

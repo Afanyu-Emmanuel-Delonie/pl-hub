@@ -38,7 +38,17 @@ export function isQuizClosedForGroup(quiz: Quiz, group: string): boolean {
   return isPast(quiz.deadline);
 }
 
-// Open overall if at least one covered group can still respond.
+// Open overall if the TA has started it and at least one covered group can
+// still respond. A quiz that hasn't been started yet is never "open" —
+// students see a waiting screen instead of the questions until it is.
 export function isQuizOpen(quiz: Quiz, allGroups: string[]): boolean {
+  if (!quiz.started) return false;
   return quizGroups(quiz, allGroups).some((g) => !isQuizClosedForGroup(quiz, g));
+}
+
+// Three-state status for admin badges/buttons — distinct from isQuizOpen's
+// boolean so "waiting to start" and "finished" render differently.
+export function quizStatus(quiz: Quiz, allGroups: string[]): "not-started" | "open" | "closed" {
+  if (!quiz.started) return "not-started";
+  return isQuizOpen(quiz, allGroups) ? "open" : "closed";
 }

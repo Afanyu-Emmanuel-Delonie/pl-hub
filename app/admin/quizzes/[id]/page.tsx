@@ -13,7 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ShareLink } from "@/components/ui/ShareLink";
 import { QRCodeImage } from "@/components/ui/QRCodeImage";
 import { useQuizStore } from "@/lib/store";
-import { isQuizOpen, orderQuestions } from "@/lib/quizzes";
+import { orderQuestions, quizStatus } from "@/lib/quizzes";
 import { formatDate, formatDeadline } from "@/lib/format";
 import type { QuizQuestion } from "@/lib/types";
 
@@ -102,7 +102,7 @@ export default function QuizDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [responseToDelete, setResponseToDelete] = useState<{ id: string; studentName: string } | null>(null);
-  const { quizzes, responses, groups, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useQuizStore();
+  const { quizzes, responses, groups, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useQuizStore();
 
   const quiz = useMemo(() => quizzes.find((q) => q.id === params.id), [quizzes, params.id]);
   const results = useMemo(
@@ -124,7 +124,7 @@ export default function QuizDetailPage() {
     );
   }
 
-  const isClosed = !isQuizOpen(quiz, groups);
+  const status = quizStatus(quiz, groups);
   const orderedQuestions = orderQuestions(quiz.questions);
 
   const average =
@@ -133,6 +133,10 @@ export default function QuizDetailPage() {
           (results.reduce((sum, r) => sum + r.score / r.maxScore, 0) / results.length) * 100
         )
       : 0;
+
+  function handleStartQuiz() {
+    startQuiz(quiz!.id);
+  }
 
   function handleEndQuiz() {
     endQuiz(quiz!.id);
@@ -173,8 +177,11 @@ export default function QuizDetailPage() {
               {quiz.questions.length} questions ·{" "}
               {quiz.questions.reduce((sum, q) => sum + q.points, 0)} points
             </span>
-            <Badge variant={isClosed ? "neutral" : "brand"} dot>
-              {isClosed ? "Closed" : "Open"}
+            <Badge
+              variant={status === "open" ? "brand" : status === "not-started" ? "warning" : "neutral"}
+              dot
+            >
+              {status === "open" ? "Open" : status === "not-started" ? "Not started" : "Closed"}
             </Badge>
           </div>
         </div>
@@ -182,16 +189,20 @@ export default function QuizDetailPage() {
           <Link href={`/admin/quizzes/${quiz.id}/edit`}>
             <Button variant="secondary">Edit</Button>
           </Link>
-          {isClosed ? (
-            <Button variant="secondary" onClick={handleReopenQuiz}>
-              Reopen quiz
-            </Button>
-          ) : (
+          {status === "not-started" && (
+            <Button onClick={handleStartQuiz}>Start quiz</Button>
+          )}
+          {status === "open" && (
             <Button variant="secondary" onClick={() => setConfirmOpen(true)}>
               End quiz
             </Button>
           )}
-          {isClosed && (
+          {status === "closed" && (
+            <Button variant="secondary" onClick={handleReopenQuiz}>
+              Reopen quiz
+            </Button>
+          )}
+          {status !== "open" && (
             <Button variant="secondary" onClick={() => setDeleteOpen(true)}>
               Delete quiz
             </Button>
@@ -293,6 +304,11 @@ export default function QuizDetailPage() {
                       <td className="px-5 py-4 text-slate-500">
                         {formatDate(r.submittedAt)}
                         {r.late && <span className="ml-2"><Badge variant="warning">Late</Badge></span>}
+                        {r.autoSubmitted && (
+                          <span className="ml-2" title={`Switched tabs ${r.tabSwitchCount ?? 4}+ times`}>
+                            <Badge variant="danger">Auto-submitted</Badge>
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-right">
                         <button
@@ -321,6 +337,11 @@ export default function QuizDetailPage() {
                           {r.late && (
                             <span className="ml-2">
                               <Badge variant="warning">Late</Badge>
+                            </span>
+                          )}
+                          {r.autoSubmitted && (
+                            <span className="ml-2" title={`Switched tabs ${r.tabSwitchCount ?? 4}+ times`}>
+                              <Badge variant="danger">Auto-submitted</Badge>
                             </span>
                           )}
                         </p>
