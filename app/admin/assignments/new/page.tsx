@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Textarea } from "@/components/ui/Field";
 import { GroupMultiSelect } from "@/components/admin/GroupMultiSelect";
-import { addAssignment } from "@/lib/mock-data";
+import { useStore } from "@/lib/store";
 import type { Assignment, ContentBlock, GroupDeadline } from "@/lib/types";
 import { AlignLeft, Code2, HelpCircle, GripVertical, X, Plus } from "lucide-react";
 
@@ -53,6 +53,7 @@ function BlockShell({
 
 export default function NewAssignmentPage() {
   const router = useRouter();
+  const { addAssignment } = useStore();
 
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState<string[]>([""]);
@@ -115,7 +116,7 @@ export default function NewAssignmentPage() {
     setDeadlines((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
   }
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const validDeadlines = deadlines.filter((d) => d.groups.length > 0 && d.deadline);
     if (!title.trim() || validDeadlines.length === 0) return;
@@ -132,7 +133,7 @@ export default function NewAssignmentPage() {
       createdAt: new Date().toISOString(),
     };
 
-    addAssignment(newAssignment);
+    await addAssignment(newAssignment);
     router.push(`/admin/assignments/${id}`);
   }
 

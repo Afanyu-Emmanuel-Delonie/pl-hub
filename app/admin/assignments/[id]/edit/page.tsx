@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Textarea } from "@/components/ui/Field";
 import { GroupMultiSelect } from "@/components/admin/GroupMultiSelect";
-import { ASSIGNMENTS, updateAssignment } from "@/lib/mock-data";
+import { useStore } from "@/lib/store";
 import type { ContentBlock, GroupDeadline } from "@/lib/types";
 import { AlignLeft, Code2, HelpCircle, GripVertical, X, Plus } from "lucide-react";
 
@@ -47,7 +47,9 @@ export default function EditAssignmentPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
 
-  const assignment = useMemo(() => ASSIGNMENTS.find((a) => a.id === params.id), [params.id]);
+  const { assignments, updateAssignment } = useStore();
+
+  const assignment = useMemo(() => assignments.find((a) => a.id === params.id), [assignments, params.id]);
 
   const [title, setTitle] = useState(assignment?.title ?? "");
   const [instructions, setInstructions] = useState<string[]>(
@@ -123,13 +125,13 @@ export default function EditAssignmentPage() {
     setDeadlines((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!assignment) return;
     const validDeadlines = deadlines.filter((d) => d.groups.length > 0 && d.deadline);
     if (!title.trim() || validDeadlines.length === 0) return;
 
-    updateAssignment({
+    await updateAssignment({
       ...assignment,
       title: title.trim(),
       instructions: instructions.map((p) => p.trim()).filter(Boolean),

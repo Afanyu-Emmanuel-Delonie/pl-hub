@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+
+    // Assignments & quizzes: anyone can read (students view these with no
+    // login), only signed-in staff can create, edit, or delete them.
+    match /assignments/{id} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+    match /quizzes/{id} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
+    // Submissions & responses: students submit with no account (name +
+    // Student ID only), so writes stay open here. Staff still need access
+    // to read/grade/delete them. This mirrors the project's accepted
+    // trade-off: a low-stakes class tool, not a hardened multi-tenant app.
+    match /assignmentSubmissions/{id} {
+      allow read, write: if true;
+    }
+    match /quizResponses/{id} {
+      allow read, write: if true;
+    }
+
+    // Roster, bonus points, attendance, and CA settings are staff-only —
+    // nothing on the public student pages ever reads or writes these.
+    match /students/{id} {
+      allow read, write: if signedIn();
+    }
+    match /bonusAwards/{id} {
+      allow read, write: if signedIn();
+    }
+    match /attendance/{id} {
+      allow read, write: if signedIn();
+    }
+    match /settings/{id} {
+      allow read, write: if signedIn();
+    }
+    match /groups/{id} {
+      allow read, write: if signedIn();
+    }
+  }
+}

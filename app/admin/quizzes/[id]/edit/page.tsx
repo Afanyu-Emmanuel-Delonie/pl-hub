@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
@@ -8,21 +8,27 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { GroupPicker } from "@/components/admin/GroupPicker";
 import { QuestionEditor, emptyQuestion } from "@/components/admin/QuestionEditor";
-import { QUIZZES, updateQuiz } from "@/lib/mock-data";
+import { useQuizStore } from "@/lib/store";
 import type { QuizQuestion } from "@/lib/types";
 
 export default function EditQuizPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
 
-  const quiz = useMemo(() => QUIZZES.find((q) => q.id === params.id), [params.id]);
+  const { quizzes, updateQuiz } = useQuizStore();
+
+  const quiz = useMemo(() => quizzes.find((q) => q.id === params.id), [quizzes, params.id]);
 
   const [title, setTitle] = useState(quiz?.title ?? "");
   const [deadline, setDeadline] = useState(quiz?.deadline ?? "");
   const [groups, setGroups] = useState<string[]>(quiz?.groups ?? []);
-  const [questions, setQuestions] = useState<QuizQuestion[]>(
-    quiz?.questions.length ? quiz.questions : [emptyQuestion()]
-  );
+  const [questions, setQuestions] = useState<QuizQuestion[]>(quiz?.questions ?? []);
+
+  // Generated client-side only — emptyQuestion()'s random id would otherwise
+  // mismatch between server and client render for a quiz with no questions yet.
+  useEffect(() => {
+    setQuestions((prev) => (prev.length === 0 ? [emptyQuestion()] : prev));
+  }, []);
 
   if (!quiz) {
     return (

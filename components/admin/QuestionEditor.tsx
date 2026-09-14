@@ -22,6 +22,7 @@ export function emptyQuestion(): QuizQuestion {
     text: "",
     options: ["", ""],
     correctIndexes: [0],
+    points: 1,
   };
 }
 
@@ -93,6 +94,29 @@ export function QuestionEditor({
           Q{index + 1}
         </span>
         <div className="flex items-center gap-2">
+          {/* Bonus toggle */}
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            <input
+              type="checkbox"
+              checked={!!question.isBonus}
+              onChange={(e) => onChange({ ...question, isBonus: e.target.checked })}
+              className="h-3.5 w-3.5 accent-amber-500"
+            />
+            Bonus
+          </label>
+          {/* Points */}
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            Points
+            <input
+              type="number"
+              min={1}
+              value={question.points}
+              onChange={(e) =>
+                onChange({ ...question, points: Math.max(1, Number(e.target.value) || 1) })
+              }
+              className="w-12 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-center text-xs font-medium text-slate-600 focus:border-brand focus:outline-none"
+            />
+          </label>
           {/* Type selector */}
           <select
             value={question.type}
@@ -120,6 +144,11 @@ export function QuestionEditor({
           placeholder="Question text..."
           required
         />
+        {question.isBonus && (
+          <p className="text-xs font-medium text-amber-600">
+            Bonus question — always shown last, optional, and scored as extra credit.
+          </p>
+        )}
 
         {/* Optional code block toggle */}
         {!question.codeBlock ? (

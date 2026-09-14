@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { useAuth } from "@/lib/auth";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
@@ -29,6 +30,7 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  const { logout } = useAuth();
 
   return (
     <>
@@ -92,7 +94,7 @@ export function Sidebar({
         {/* Logout */}
         <div className="p-3">
           <button
-            onClick={() => {/* handle logout */}}
+            onClick={() => logout()}
             className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/50 hover:bg-white/8 hover:text-white/80 transition-colors"
           >
             <LogOut className="h-4 w-4 shrink-0" />

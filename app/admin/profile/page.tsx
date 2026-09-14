@@ -1,9 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Pencil, Trash2, Plus, Check, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { Input, Label } from "@/components/ui/Field";
-import { ATTENDANCE, DEFAULT_CA_WEIGHTS, STUDENTS } from "@/lib/mock-data";
+import { useStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { computeCARow, quizWeight } from "@/lib/ca";
 import type { CAWeights } from "@/lib/types";
 
@@ -12,22 +16,91 @@ function pct(n: number) {
 }
 
 export default function ProfilePage() {
-  const [weights, setWeights] = useState<CAWeights>(DEFAULT_CA_WEIGHTS);
-  const [attendance, setAttendance] = useState<Record<string, number>>(() =>
-    Object.fromEntries(ATTENDANCE.map((a) => [a.studentId, a.percentage]))
+  const { user } = useAuth();
+  const {
+    students,
+    attendance,
+    caWeights,
+    setAttendance,
+    saveCAWeights,
+    assignments,
+    submissions,
+    quizzes,
+    quizResponses,
+    groups,
+    addGroup,
+    renameGroup,
+    removeGroup,
+  } = useStore();
+  const [weights, setWeights] = useState<CAWeights>(caWeights);
+  const [savedWeights, setSavedWeights] = useState(caWeights);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [editingGroup, setEditingGroup] = useState<string | null>(null);
+  const [editGroupValue, setEditGroupValue] = useState("");
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
+
+  const studentCountByGroup = Object.fromEntries(
+    groups.map((g) => [g, students.filter((s) => s.group === g).length])
   );
+
+  async function handleAddGroup(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newGroupName.trim();
+    if (!name || groups.includes(name)) return;
+    setSavingGroup(true);
+    await addGroup(name);
+    setNewGroupName("");
+    setSavingGroup(false);
+  }
+
+  function startEditGroup(group: string) {
+    setEditingGroup(group);
+    setEditGroupValue(group);
+  }
+
+  async function handleRenameGroup(original: string) {
+    const name = editGroupValue.trim();
+    if (!name || name === original) { setEditingGroup(null); return; }
+    setSavingGroup(true);
+    await renameGroup(original, name);
+    setEditingGroup(null);
+    setSavingGroup(false);
+  }
+
+  async function confirmDeleteGroup() {
+    if (!groupToDelete) return;
+    await removeGroup(groupToDelete);
+    setGroupToDelete(null);
+  }
+
+  // caWeights starts as a placeholder default and updates once the Firestore
+  // doc actually loads — sync the local draft when that real value arrives.
+  useEffect(() => {
+    setWeights(caWeights);
+    setSavedWeights(caWeights);
+  }, [caWeights]);
 
   const wQuizzes = quizWeight(weights);
   const overAllocated = weights.attendance + weights.assignments > 100;
+  const weightsDirty = JSON.stringify(weights) !== JSON.stringify(savedWeights);
 
   const rows = useMemo(
-    () => STUDENTS.map((s) => computeCARow(s, attendance, weights)),
-    [attendance, weights]
+    () =>
+      students.map((s) =>
+        computeCARow(s, attendance, weights, assignments, submissions, quizzes, quizResponses)
+      ),
+    [students, attendance, weights, assignments, submissions, quizzes, quizResponses]
   );
 
-  function setAttendanceFor(studentId: string, value: string) {
+  async function handleSaveWeights() {
+    await saveCAWeights(weights);
+    setSavedWeights(weights);
+  }
+
+  function handleAttendanceChange(studentId: string, value: string) {
     const n = value === "" ? 0 : Number(value);
-    setAttendance((prev) => ({ ...prev, [studentId]: n }));
+    setAttendance(studentId, n);
   }
 
   return (
@@ -47,8 +120,71 @@ export default function ProfilePage() {
         </span>
         <div>
           <p className="text-sm font-medium text-foreground">Course Staff</p>
-          <p className="text-xs text-slate-400">ta@university.edu</p>
+          <p className="text-xs text-slate-400">{user?.email ?? "—"}</p>
         </div>
+      </Card>
+
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">
+          Groups
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Manage the groups students are assigned to. Used when setting
+          per-group deadlines on assignments and quizzes.
+        </p>
+      </div>
+
+      <Card className="mb-6">
+        <form onSubmit={handleAddGroup} className="flex gap-2 border-b border-slate-100 px-5 py-4">
+          <input
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            placeholder="New group name…"
+            className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+          />
+          <Button type="submit" size="sm" disabled={savingGroup || !newGroupName.trim()}>
+            <Plus className="h-4 w-4" /> Add
+          </Button>
+        </form>
+
+        {groups.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-slate-400">No groups yet. Add one above.</p>
+        ) : (
+          <ul className="divide-y divide-slate-50">
+            {groups.map((group) => (
+              <li key={group} className="flex items-center gap-3 px-5 py-3">
+                {editingGroup === group ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={editGroupValue}
+                      onChange={(e) => setEditGroupValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleRenameGroup(group); if (e.key === "Escape") setEditingGroup(null); }}
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                    />
+                    <button type="button" onClick={() => handleRenameGroup(group)} className="text-brand hover:text-brand-hover" aria-label="Save">
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button type="button" onClick={() => setEditingGroup(null)} className="text-slate-400 hover:text-slate-600" aria-label="Cancel">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-foreground">{group}</span>
+                    <span className="text-xs text-slate-400">{studentCountByGroup[group] ?? 0} student{studentCountByGroup[group] !== 1 ? "s" : ""}</span>
+                    <button type="button" onClick={() => startEditGroup(group)} className="text-slate-400 hover:text-slate-600" aria-label="Edit">
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button type="button" onClick={() => setGroupToDelete(group)} className="text-slate-400 hover:text-red-500" aria-label="Delete">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <div className="mb-6">
@@ -115,6 +251,19 @@ export default function ProfilePage() {
             Attendance + assignments exceed 100% — quizzes has been clamped to 0%.
           </p>
         )}
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSaveWeights}
+            disabled={!weightsDirty}
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Save split
+          </button>
+          {!weightsDirty && (
+            <span className="text-xs text-slate-400">Saved</span>
+          )}
+        </div>
       </Card>
 
       <Card>
@@ -157,7 +306,7 @@ export default function ProfilePage() {
                         placeholder="—"
                         value={row.attendancePct ?? ""}
                         onChange={(e) =>
-                          setAttendanceFor(row.studentId, e.target.value)
+                          handleAttendanceChange(row.studentId, e.target.value)
                         }
                         className="w-20 text-center tabular-nums"
                       />
@@ -206,7 +355,7 @@ export default function ProfilePage() {
                   max={100}
                   placeholder="—"
                   value={row.attendancePct ?? ""}
-                  onChange={(e) => setAttendanceFor(row.studentId, e.target.value)}
+                  onChange={(e) => handleAttendanceChange(row.studentId, e.target.value)}
                   className="w-16 text-center tabular-nums"
                 />
                 <span className="text-xs text-slate-400">%</span>
@@ -219,6 +368,16 @@ export default function ProfilePage() {
           ))}
         </div>
       </Card>
+
+      <Modal open={!!groupToDelete} onClose={() => setGroupToDelete(null)} title="Delete group?">
+        <p className="text-sm text-slate-600">
+          Delete &quot;{groupToDelete}&quot;? This won&apos;t remove students already in this group.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setGroupToDelete(null)}>Cancel</Button>
+          <Button variant="danger" onClick={confirmDeleteGroup}>Delete</Button>
+        </div>
+      </Modal>
     </div>
   );
 }

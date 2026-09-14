@@ -158,6 +158,15 @@ export function setQuizClosedGroups(id: string, closedGroups: string[]) {
   if (q) q.closedGroups = closedGroups;
 }
 
+export function reopenQuiz(id: string) {
+  const q = QUIZZES.find((q) => q.id === id);
+  if (!q) return;
+  q.closedGroups = [];
+  const newDeadline = new Date();
+  newDeadline.setDate(newDeadline.getDate() + 7);
+  q.deadline = newDeadline.toISOString();
+}
+
 export const ASSIGNMENT_SUBMISSIONS: AssignmentSubmission[] = [
   {
     id: "a1__S001",
@@ -231,6 +240,18 @@ export const ASSIGNMENT_SUBMISSIONS: AssignmentSubmission[] = [
   },
 ];
 
+export function addAssignmentSubmission(submission: AssignmentSubmission) {
+  ASSIGNMENT_SUBMISSIONS.unshift(submission);
+}
+
+export function deleteAssignment(id: string) {
+  const idx = ASSIGNMENTS.findIndex((a) => a.id === id);
+  if (idx !== -1) ASSIGNMENTS.splice(idx, 1);
+  for (let i = ASSIGNMENT_SUBMISSIONS.length - 1; i >= 0; i--) {
+    if (ASSIGNMENT_SUBMISSIONS[i].assignmentId === id) ASSIGNMENT_SUBMISSIONS.splice(i, 1);
+  }
+}
+
 export const QUIZZES: Quiz[] = [
   {
     id: "q1",
@@ -246,6 +267,7 @@ export const QUIZZES: Quiz[] = [
         text: "Which normal form eliminates transitive dependencies?",
         options: ["1NF", "2NF", "3NF", "BCNF"],
         correctIndexes: [2],
+        points: 1,
       },
       {
         id: "q1-2",
@@ -253,6 +275,7 @@ export const QUIZZES: Quiz[] = [
         text: "A composite key is made up of:",
         options: ["A single unique column", "Two or more columns together", "A foreign key only", "An index"],
         correctIndexes: [1],
+        points: 1,
       },
     ],
   },
@@ -270,6 +293,7 @@ export const QUIZZES: Quiz[] = [
         text: "A B-tree index is most effective for:",
         options: ["Equality and range queries", "Full-text search only", "Unordered scans", "Storing blobs"],
         correctIndexes: [0],
+        points: 1,
       },
       {
         id: "q2-2",
@@ -277,6 +301,7 @@ export const QUIZZES: Quiz[] = [
         text: "Which of the following are valid JOIN types in SQL? (select all that apply)",
         options: ["INNER JOIN", "OUTER JOIN", "CROSS JOIN", "DIAGONAL JOIN", "LEFT JOIN"],
         correctIndexes: [0, 1, 2, 4],
+        points: 2,
       },
       {
         id: "q2-3",
@@ -284,6 +309,7 @@ export const QUIZZES: Quiz[] = [
         text: "A clustered index physically reorders the rows in a table.",
         options: ["True", "False"],
         correctIndexes: [0],
+        points: 1,
       },
     ],
   },
@@ -379,6 +405,18 @@ export const QUIZ_RESPONSES: QuizResponse[] = [
     late: false,
   },
 ];
+
+export function addQuizResponse(response: QuizResponse) {
+  QUIZ_RESPONSES.unshift(response);
+}
+
+export function deleteQuiz(id: string) {
+  const idx = QUIZZES.findIndex((q) => q.id === id);
+  if (idx !== -1) QUIZZES.splice(idx, 1);
+  for (let i = QUIZ_RESPONSES.length - 1; i >= 0; i--) {
+    if (QUIZ_RESPONSES[i].quizId === id) QUIZ_RESPONSES.splice(i, 1);
+  }
+}
 
 export const BONUS_AWARDS: BonusAward[] = [
   {

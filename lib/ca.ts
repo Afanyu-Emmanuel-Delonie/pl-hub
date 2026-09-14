@@ -1,8 +1,11 @@
-import { ASSIGNMENTS, ASSIGNMENT_SUBMISSIONS, QUIZZES, QUIZ_RESPONSES } from "./mock-data";
-import type { CAWeights, Student } from "./types";
-
-const TOTAL_ASSIGNMENT_MAX = ASSIGNMENTS.reduce((sum, a) => sum + a.maxScore, 0);
-const TOTAL_QUIZ_MAX = QUIZZES.reduce((sum, q) => sum + q.questions.length, 0);
+import type {
+  Assignment,
+  AssignmentSubmission,
+  CAWeights,
+  Quiz,
+  QuizResponse,
+  Student,
+} from "./types";
 
 export type CARow = {
   studentId: string;
@@ -22,20 +25,29 @@ export function quizWeight(weights: CAWeights) {
 export function computeCARow(
   student: Student,
   attendanceById: Record<string, number>,
-  weights: CAWeights
+  weights: CAWeights,
+  assignments: Assignment[],
+  submissions: AssignmentSubmission[],
+  quizzes: Quiz[],
+  quizResponses: QuizResponse[]
 ): CARow {
-  const earnedAssignment = ASSIGNMENT_SUBMISSIONS.filter(
-    (s) => s.studentId === student.id
-  ).reduce((sum, s) => sum + (s.score ?? 0), 0);
-
-  const earnedQuiz = QUIZ_RESPONSES.filter((r) => r.studentId === student.id).reduce(
-    (sum, r) => sum + r.score,
+  const totalAssignmentMax = assignments.reduce((sum, a) => sum + a.maxScore, 0);
+  const totalQuizMax = quizzes.reduce(
+    (sum, q) => sum + q.questions.reduce((qSum, question) => qSum + question.points, 0),
     0
   );
 
+  const earnedAssignment = submissions
+    .filter((s) => s.studentId === student.id)
+    .reduce((sum, s) => sum + (s.score ?? 0), 0);
+
+  const earnedQuiz = quizResponses
+    .filter((r) => r.studentId === student.id)
+    .reduce((sum, r) => sum + r.score, 0);
+
   const assignmentPct =
-    TOTAL_ASSIGNMENT_MAX > 0 ? (earnedAssignment / TOTAL_ASSIGNMENT_MAX) * 100 : 0;
-  const quizPct = TOTAL_QUIZ_MAX > 0 ? (earnedQuiz / TOTAL_QUIZ_MAX) * 100 : 0;
+    totalAssignmentMax > 0 ? (earnedAssignment / totalAssignmentMax) * 100 : 0;
+  const quizPct = totalQuizMax > 0 ? (earnedQuiz / totalQuizMax) * 100 : 0;
   const attendancePct = attendanceById[student.id] ?? null;
 
   const wQuizzes = quizWeight(weights);

@@ -52,6 +52,8 @@ export type QuizQuestion = {
   codeBlock?: { value: string; language?: string };
   options: string[];        // empty for short-answer
   correctIndexes: number[]; // multiple-choice = 1 item, multi-select = many, true-false = 1 (0=True,1=False)
+  points: number;           // defaults to 1
+  isBonus?: boolean;        // optional extra-credit question — always shown/ordered last, never required
 };
 
 export type Quiz = {

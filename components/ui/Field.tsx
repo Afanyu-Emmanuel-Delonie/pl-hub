@@ -13,8 +13,27 @@ export function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${baseClasses} ${props.className ?? ""}`} />;
+export function Input({
+  error,
+  className,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { error?: string }) {
+  const input = (
+    <input
+      {...props}
+      className={`${baseClasses} ${error ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : ""} ${className ?? ""}`}
+    />
+  );
+  // Only wrap in a div when there's an error to show — an unconditional
+  // wrapper breaks callers that rely on the bare input sizing itself inside
+  // a flex row (e.g. QuestionEditor's option rows use the default w-full).
+  if (!error) return input;
+  return (
+    <div>
+      {input}
+      <p className="mt-1.5 text-xs font-medium text-rose-600">{error}</p>
+    </div>
+  );
 }
 
 function resize(el: HTMLTextAreaElement) {
