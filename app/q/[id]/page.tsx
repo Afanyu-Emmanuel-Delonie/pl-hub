@@ -1,0 +1,320 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { submitQuizResponse } from "@/lib/db";
+import { Button } from "@/components/ui/Button";
+import { Input, Label } from "@/components/ui/Field";
+import { CodeBlock } from "@/components/ui/CodeBlock";
+import { Dropdown } from "@/components/ui/Dropdown";
+import { Logo } from "@/components/ui/Logo";
+import { isQuizClosedForGroup, isQuizOpen, quizGroups, shuffleQuestions } from "@/lib/quizzes";
+import { validateName, validateStudentId, validateGroup } from "@/lib/validation";
+import type { Quiz, QuizQuestion } from "@/lib/types";
+
+type Step = "intro" | "answering" | "done";
+type Answer = number[] | string;
+
+function isAnswered(question: QuizQuestion, answer: Answer | undefined) {
+  if (question.type === "short-answer") return typeof answer === "string" && answer.trim() !== "";
+  if (!Array.isArray(answer)) return false;
+  // Multi-select questions require picking exactly as many options as are
+  // correct (e.g. "select TWO") — anything else is an incomplete answer.
+  if (question.type === "multi-select") return answer.length === question.correctIndexes.length;
+  return answer.length > 0;
+}
+
+function scoreAnswer(question: QuizQuestion, answer: Answer | undefined): number {
+  if (question.type === "short-answer" || !Array.isArray(answer)) return 0;
+  const correct = [...question.correctIndexes].sort().join(",");
+  const given = [...answer].sort().join(",");
+  return correct === given ? 1 : 0;
+}
+
+function ProgressBar({ current, total }: { current: number; total: number }) {
+  const pct = Math.round((current / total) * 100);
+  return (
+    <div className="mb-8">
+      <div className="mb-1.5 flex items-center justify-between text-xs text-slate-400">
+        <span>Question {current} of {total}</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-brand transition-all duration-300" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+export default function PublicQuizPage() {
+  const params = useParams<{ id: string }>();
+  const [quiz, setQuiz] = useState<Quiz | null | undefined>(undefined);
+
+  const [step, setStep] = useState<Step>("intro");
+  const [name, setName] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [group, setGroup] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; studentId?: string; group?: string }>({});
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const [current, setCurrent] = useState(0);
+  const [orderedQuestions, setOrderedQuestions] = useState<QuizQuestion[]>([]);
+  const [result, setResult] = useState<{ score: number; maxScore: number } | null>(null);
+  const unsubQuizRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "quizzes", params.id), (snap) => {
+      setQuiz(snap.exists() ? ({ id: snap.id, ...snap.data() } as Quiz) : null);
+    });
+    unsubQuizRef.current = unsub;
+    return unsub;
+  }, [params.id]);
+
+  if (quiz === undefined) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-slate-400">Loading…</p>
+      </main>
+    );
+  }
+
+  if (quiz === null) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <p className="text-sm text-slate-500">Quiz not found.</p>
+      </main>
+    );
+  }
+
+  const groups = quizGroups(quiz);
+  const quizOpen = isQuizOpen(quiz);
+  const groupClosed = group !== "" && isQuizClosedForGroup(quiz, group);
+  const question = orderedQuestions[current];
+  const totalQ = quiz.questions.length;
+  const canAdvance = question && (question.isBonus || isAnswered(question, answers[question.id]));
+
+  function setAnswer(questionId: string, answer: Answer) {
+    setAnswers((prev) => ({ ...prev, [questionId]: answer }));
+  }
+
+  function toggleChoice(q: QuizQuestion, index: number) {
+    const cur = (answers[q.id] as number[] | undefined) ?? [];
+    if (q.type === "multi-select") {
+      if (cur.includes(index)) {
+        setAnswer(q.id, cur.filter((i) => i !== index));
+      } else if (cur.length < q.correctIndexes.length) {
+        setAnswer(q.id, [...cur, index]);
+      }
+      // else: already picked the required number — ignore extra selections
+      // until one is deselected, rather than letting the count run away.
+    } else {
+      setAnswer(q.id, [index]);
+    }
+  }
+
+  function handleStart(e: React.FormEvent) {
+    e.preventDefault();
+    const nextErrors = {
+      name: validateName(name) ?? undefined,
+      studentId: validateStudentId(studentId) ?? undefined,
+      group: groupClosed ? "This group's access is closed." : (validateGroup(group) ?? undefined),
+    };
+    setErrors(nextErrors);
+    if (Object.values(nextErrors).some(Boolean)) return;
+
+    setOrderedQuestions(shuffleQuestions(quiz!.questions));
+    setStep("answering");
+  }
+
+  async function handleSubmit() {
+    const regular = quiz!.questions.filter((q) => !q.isBonus);
+    const bonus = quiz!.questions.filter((q) => q.isBonus);
+    // Bonus questions add to the score as extra credit but never inflate
+    // maxScore — a perfect regular score is still 100% without them.
+    const score =
+      regular.reduce((sum, q) => sum + scoreAnswer(q, answers[q.id]), 0) +
+      bonus.reduce((sum, q) => sum + scoreAnswer(q, answers[q.id]), 0);
+    const maxScore = regular.length;
+    await submitQuizResponse({
+      id: `${quiz!.id}__${studentId.trim().toUpperCase()}`,
+      quizId: quiz!.id,
+      studentId: studentId.trim().toUpperCase(),
+      studentName: name.trim(),
+      group,
+      score,
+      maxScore,
+      submittedAt: new Date().toISOString(),
+      late: false,
+    });
+    setResult({ score, maxScore });
+    setStep("done");
+    // No more updates matter to this student once they've submitted — free
+    // the connection instead of leaving it open until the tab is closed.
+    unsubQuizRef.current?.();
+  }
+
+  function handleNext() {
+    if (current < totalQ - 1) setCurrent((c) => c + 1);
+    else handleSubmit();
+  }
+
+  const scorePct = result && result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0;
+
+  return (
+    <main className="flex min-h-screen flex-col bg-slate-50">
+      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3">
+        <Logo size={28} />
+        {step === "answering" && (
+          <span className="text-xs font-medium text-slate-400 tabular-nums">{current + 1} / {totalQ}</span>
+        )}
+      </header>
+
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-lg">
+
+          {!quizOpen && step !== "done" && (
+            <div className="rounded-xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-semibold text-foreground">Quiz closed</h2>
+              <p className="mt-1 text-sm text-slate-500">This quiz is no longer accepting responses.</p>
+            </div>
+          )}
+
+          {quizOpen && step === "intro" && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quiz</p>
+                <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">{quiz.title}</h1>
+                <p className="mt-1 text-sm text-slate-500">{totalQ} question{totalQ !== 1 ? "s" : ""}</p>
+              </div>
+              <form onSubmit={handleStart} noValidate className="space-y-4 px-6 py-5">
+                <div>
+                  <Label>Full name</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); setErrors((er) => ({ ...er, name: undefined })); }}
+                    placeholder="Your full name"
+                    error={errors.name}
+                  />
+                </div>
+                <div>
+                  <Label>Student ID</Label>
+                  <Input
+                    value={studentId}
+                    onChange={(e) => { setStudentId(e.target.value); setErrors((er) => ({ ...er, studentId: undefined })); }}
+                    placeholder="e.g. S001"
+                    error={errors.studentId}
+                  />
+                </div>
+                <div>
+                  <Label>Group</Label>
+                  <Dropdown
+                    options={groups.map((g) => ({ label: g, value: g }))}
+                    value={group}
+                    onChange={(v) => { setGroup(v); setErrors((er) => ({ ...er, group: undefined })); }}
+                    placeholder="Select your group"
+                    error={errors.group || (groupClosed ? "This group's access is closed." : undefined)}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={groupClosed}>
+                  Start quiz →
+                </Button>
+              </form>
+            </div>
+          )}
+
+          {step === "answering" && question && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="px-6 pt-6">
+                <ProgressBar current={current + 1} total={totalQ} />
+              </div>
+              <div className="px-6 pb-6">
+                <div className="mb-5 flex items-start gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+                    {current + 1}
+                  </span>
+                  <div>
+                    <p className="pt-0.5 text-base font-medium leading-relaxed text-foreground">{question.text}</p>
+                    {question.isBonus && (
+                      <span className="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Bonus · optional
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {question.type === "multi-select" && (
+                  <p className="mb-3 text-xs font-medium text-slate-400">
+                    Select exactly {question.correctIndexes.length}
+                    {(() => {
+                      const picked = ((answers[question.id] as number[] | undefined) ?? []).length;
+                      return picked > 0 ? ` (${picked} selected)` : "";
+                    })()}
+                  </p>
+                )}
+                {question.codeBlock && (
+                  <div className="mb-4">
+                    <CodeBlock code={question.codeBlock.value} label={question.codeBlock.language ?? "SQL"} />
+                  </div>
+                )}
+                {question.type === "short-answer" ? (
+                  <Input value={(answers[question.id] as string) ?? ""} onChange={(e) => setAnswer(question.id, e.target.value)} placeholder="Type your answer…" />
+                ) : (
+                  <div className="space-y-2.5">
+                    {question.options.map((opt, idx) => {
+                      const selected = ((answers[question.id] as number[] | undefined) ?? []).includes(idx);
+                      return (
+                        <button key={idx} type="button" onClick={() => toggleChoice(question, idx)}
+                          className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all ${selected ? "border-brand bg-brand-tint font-medium text-brand shadow-sm" : "border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}>
+                          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${selected ? "border-brand bg-brand text-white" : "border-slate-300 text-slate-400"}`}>
+                            {String.fromCharCode(65 + idx)}
+                          </span>
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="mt-6 flex items-center justify-between">
+                  <button type="button" onClick={() => setCurrent((c) => Math.max(c - 1, 0))} disabled={current === 0}
+                    className="text-sm font-medium text-slate-400 hover:text-slate-600 disabled:pointer-events-none disabled:opacity-0">
+                    ← Back
+                  </button>
+                  <Button onClick={handleNext} disabled={!canAdvance}>
+                    {current < totalQ - 1
+                      ? "Next →"
+                      : question.isBonus && !isAnswered(question, answers[question.id])
+                      ? "Skip & submit"
+                      : "Submit quiz"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === "done" && result && (
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="px-6 py-10 text-center">
+                <div className={`mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full ${scorePct >= 70 ? "bg-emerald-50" : scorePct >= 40 ? "bg-amber-50" : "bg-rose-50"}`}>
+                  <span className={`text-2xl font-bold ${scorePct >= 70 ? "text-emerald-600" : scorePct >= 40 ? "text-amber-600" : "text-rose-600"}`}>
+                    {scorePct}%
+                  </span>
+                </div>
+                <h2 className="text-lg font-semibold text-foreground">Quiz submitted</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  You scored <span className="font-semibold text-foreground">{result.score}</span> out of{" "}
+                  <span className="font-semibold text-foreground">{result.maxScore}</span>
+                </p>
+                <p className="mt-6 text-xs text-slate-400">You can safely close this page.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}

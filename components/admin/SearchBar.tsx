@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ASSIGNMENTS, QUIZZES, STUDENTS } from "@/lib/mock-data";
+import { useStore } from "@/lib/store";
+import type { Assignment, Quiz, Student } from "@/lib/types";
 
 type Result = {
   id: string;
@@ -12,49 +13,58 @@ type Result = {
   href: string;
 };
 
-function buildResults(query: string): Result[] {
+function buildResults(
+  query: string,
+  students: Student[],
+  assignments: Assignment[],
+  quizzes: Quiz[]
+): Result[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
 
-  const students: Result[] = STUDENTS.filter(
-    (s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
-  ).map((s) => ({
-    id: `student-${s.id}`,
-    label: s.name,
-    meta: `${s.id} · ${s.group}`,
-    type: "Student",
-    href: "/admin/rankings",
-  }));
+  const studentResults: Result[] = students
+    .filter((s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q))
+    .map((s) => ({
+      id: `student-${s.id}`,
+      label: s.name,
+      meta: `${s.id} · ${s.group}`,
+      type: "Student",
+      href: "/admin/rankings",
+    }));
 
-  const assignments: Result[] = ASSIGNMENTS.filter((a) =>
-    a.title.toLowerCase().includes(q)
-  ).map((a) => ({
-    id: `assignment-${a.id}`,
-    label: a.title,
-    meta: "Assignment",
-    type: "Assignment",
-    href: `/admin/assignments/${a.id}`,
-  }));
+  const assignmentResults: Result[] = assignments
+    .filter((a) => a.title.toLowerCase().includes(q))
+    .map((a) => ({
+      id: `assignment-${a.id}`,
+      label: a.title,
+      meta: "Assignment",
+      type: "Assignment",
+      href: `/admin/assignments/${a.id}`,
+    }));
 
-  const quizzes: Result[] = QUIZZES.filter((q2) =>
-    q2.title.toLowerCase().includes(q)
-  ).map((qz) => ({
-    id: `quiz-${qz.id}`,
-    label: qz.title,
-    meta: "Quiz",
-    type: "Quiz",
-    href: `/admin/quizzes/${qz.id}`,
-  }));
+  const quizResults: Result[] = quizzes
+    .filter((qz) => qz.title.toLowerCase().includes(q))
+    .map((qz) => ({
+      id: `quiz-${qz.id}`,
+      label: qz.title,
+      meta: "Quiz",
+      type: "Quiz",
+      href: `/admin/quizzes/${qz.id}`,
+    }));
 
-  return [...students, ...assignments, ...quizzes].slice(0, 8);
+  return [...studentResults, ...assignmentResults, ...quizResults].slice(0, 8);
 }
 
 export function SearchBar() {
   const router = useRouter();
+  const { students, assignments, quizzes } = useStore();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
 
-  const results = useMemo(() => buildResults(query), [query]);
+  const results = useMemo(
+    () => buildResults(query, students, assignments, quizzes),
+    [query, students, assignments, quizzes]
+  );
 
   function goTo(href: string) {
     router.push(href);

@@ -1,12 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Badge } from "@/components/ui/Badge";
-import { QUIZZES, QUIZ_RESPONSES } from "@/lib/mock-data";
+import { useQuizStore } from "@/lib/store";
 import { isQuizOpen } from "@/lib/quizzes";
 import { formatDeadline } from "@/lib/format";
 
 export default function QuizzesPage() {
+  const { quizzes, responses } = useQuizStore();
+
   return (
     <div>
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -33,8 +37,8 @@ export default function QuizzesPage() {
             </tr>
           </thead>
           <tbody>
-            {QUIZZES.map((quiz) => {
-              const responses = QUIZ_RESPONSES.filter((r) => r.quizId === quiz.id);
+            {quizzes.map((quiz) => {
+              const count = responses.filter((r) => r.quizId === quiz.id).length;
               const closed = !isQuizOpen(quiz);
               return (
                 <tr key={quiz.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
@@ -51,7 +55,7 @@ export default function QuizzesPage() {
                   </td>
                   <td className="px-5 py-4 text-slate-500">{formatDeadline(quiz.deadline)}</td>
                   <td className="px-5 py-4 text-slate-500 tabular-nums">{quiz.questions.length}</td>
-                  <td className="px-5 py-4 text-slate-500 tabular-nums">{responses.length}</td>
+                  <td className="px-5 py-4 text-slate-500 tabular-nums">{count}</td>
                   <td className="px-5 py-4">
                     <Badge variant={closed ? "neutral" : "brand"}>
                       {closed ? "Closed" : "Open"}
@@ -65,8 +69,8 @@ export default function QuizzesPage() {
 
         {/* Mobile cards */}
         <div className="divide-y divide-slate-50 md:hidden">
-          {QUIZZES.map((quiz) => {
-            const responses = QUIZ_RESPONSES.filter((r) => r.quizId === quiz.id);
+          {quizzes.map((quiz) => {
+            const count = responses.filter((r) => r.quizId === quiz.id).length;
             const closed = !isQuizOpen(quiz);
             return (
               <Link
@@ -86,7 +90,7 @@ export default function QuizzesPage() {
                   {formatDeadline(quiz.deadline)}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
-                  {quiz.questions.length} questions · {responses.length} responses
+                  {quiz.questions.length} questions · {count} responses
                 </p>
               </Link>
             );

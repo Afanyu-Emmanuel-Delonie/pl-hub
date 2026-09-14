@@ -27,7 +27,7 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 px-4 py-6 sm:py-10">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/95 px-4 py-6 sm:py-10">
       <div
         className={`w-full ${width} rounded-xl border border-slate-200 bg-white shadow-xl`}
       >

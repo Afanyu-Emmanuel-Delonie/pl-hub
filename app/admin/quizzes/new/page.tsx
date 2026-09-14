@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
@@ -8,16 +8,23 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { GroupPicker } from "@/components/admin/GroupPicker";
 import { QuestionEditor, emptyQuestion } from "@/components/admin/QuestionEditor";
-import { addQuiz } from "@/lib/mock-data";
+import { useQuizStore } from "@/lib/store";
 import type { Quiz, QuizQuestion } from "@/lib/types";
 
 export default function NewQuizPage() {
   const router = useRouter();
+  const { addQuiz } = useQuizStore();
 
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
   const [groups, setGroups] = useState<string[]>([]);
-  const [questions, setQuestions] = useState<QuizQuestion[]>([emptyQuestion()]);
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+
+  // Generated client-side only — emptyQuestion()'s random id would otherwise
+  // mismatch between the statically prerendered HTML and the client render.
+  useEffect(() => {
+    setQuestions((prev) => (prev.length === 0 ? [emptyQuestion()] : prev));
+  }, []);
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();

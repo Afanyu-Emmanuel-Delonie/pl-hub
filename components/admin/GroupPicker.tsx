@@ -1,6 +1,6 @@
 "use client";
 
-import { GROUPS } from "@/lib/mock-data";
+import { useStore } from "@/lib/store";
 
 export function GroupPicker({
   selected,
@@ -9,6 +9,7 @@ export function GroupPicker({
   selected: string[];
   onChange: (groups: string[]) => void;
 }) {
+  const { groups } = useStore();
   const allSelected = selected.length === 0;
 
   function toggle(group: string) {
@@ -32,7 +33,7 @@ export function GroupPicker({
       >
         All groups
       </button>
-      {GROUPS.map((group) => {
+      {groups.map((group) => {
         const active = selected.includes(group);
         return (
           <button

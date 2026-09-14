@@ -1,11 +1,11 @@
 "use client";
 
-import { GROUPS } from "@/lib/mock-data";
+import { useStore } from "@/lib/store";
 
 export function GroupMultiSelect({
   selected,
   onChange,
-  options = GROUPS,
+  options,
   variant = "default",
 }: {
   selected: string[];
@@ -13,6 +13,8 @@ export function GroupMultiSelect({
   options?: string[];
   variant?: "default" | "danger";
 }) {
+  const { groups } = useStore();
+  const list = options ?? groups;
   function toggle(group: string) {
     if (selected.includes(group)) {
       onChange(selected.filter((g) => g !== group));
@@ -28,7 +30,7 @@ export function GroupMultiSelect({
 
   return (
     <div className="flex flex-wrap gap-2">
-      {options.map((group) => {
+      {list.map((group) => {
         const active = selected.includes(group);
         return (
           <button

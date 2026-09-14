@@ -2,15 +2,19 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { StatCard } from "@/components/ui/StatCard";
 import { CodeBlock } from "@/components/ui/CodeBlock";
-import { QUIZZES, QUIZ_RESPONSES, setQuizClosedGroups } from "@/lib/mock-data";
-import { isQuizClosedForGroup, isQuizOpen, quizGroups } from "@/lib/quizzes";
-import { formatDate, formatDeadline, isPast } from "@/lib/format";
+import { Modal } from "@/components/ui/Modal";
+import { ShareLink } from "@/components/ui/ShareLink";
+import { QRCodeImage } from "@/components/ui/QRCodeImage";
+import { useQuizStore } from "@/lib/store";
+import { isQuizOpen, orderQuestions } from "@/lib/quizzes";
+import { formatDate, formatDeadline } from "@/lib/format";
 import type { QuizQuestion } from "@/lib/types";
 
 type Tab = "questions" | "responses";
@@ -34,9 +38,19 @@ function QuestionCard({ question, index }: { question: QuizQuestion; index: numb
             {question.text}
           </p>
         </div>
-        <span className="ml-9 shrink-0 self-start rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 sm:ml-0">
-          {TYPE_LABELS[question.type] ?? question.type}
-        </span>
+        <div className="ml-9 flex shrink-0 items-center gap-2 sm:ml-0">
+          {question.isBonus && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+              Bonus · optional
+            </span>
+          )}
+          <span className="rounded-full bg-brand-tint px-2.5 py-0.5 text-xs font-medium text-brand">
+            {question.points} pt{question.points !== 1 ? "s" : ""}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">
+            {TYPE_LABELS[question.type] ?? question.type}
+          </span>
+        </div>
       </div>
 
       {question.codeBlock && (
@@ -82,16 +96,21 @@ function QuestionCard({ question, index }: { question: QuizQuestion; index: numb
 
 export default function QuizDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("questions");
-  const [, forceUpdate] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [responseToDelete, setResponseToDelete] = useState<{ id: string; studentName: string } | null>(null);
+  const { quizzes, responses, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useQuizStore();
 
-  const quiz = useMemo(() => QUIZZES.find((q) => q.id === params.id), [params.id]);
+  const quiz = useMemo(() => quizzes.find((q) => q.id === params.id), [quizzes, params.id]);
   const results = useMemo(
     () =>
-      QUIZ_RESPONSES.filter((r) => r.quizId === params.id).sort(
+      responses.filter((r) => r.quizId === params.id).sort(
         (a, b) => b.score / b.maxScore - a.score / a.maxScore
       ),
-    [params.id]
+    [responses, params.id]
   );
 
   if (!quiz) {
@@ -106,7 +125,7 @@ export default function QuizDetailPage() {
   }
 
   const isClosed = !isQuizOpen(quiz);
-  const groups = quizGroups(quiz);
+  const orderedQuestions = orderQuestions(quiz.questions);
 
   const average =
     results.length > 0
@@ -115,12 +134,24 @@ export default function QuizDetailPage() {
         )
       : 0;
 
-  function toggleGroup(group: string) {
-    const closedGroups = quiz!.closedGroups.includes(group)
-      ? quiz!.closedGroups.filter((g) => g !== group)
-      : [...quiz!.closedGroups, group];
-    setQuizClosedGroups(quiz!.id, closedGroups);
-    forceUpdate((n) => n + 1);
+  function handleEndQuiz() {
+    endQuiz(quiz!.id);
+    setConfirmOpen(false);
+  }
+
+  function handleReopenQuiz() {
+    reopenQuiz(quiz!.id);
+  }
+
+  function handleDelete() {
+    deleteQuiz(quiz!.id);
+    router.push("/admin/quizzes");
+  }
+
+  function confirmDeleteResponse() {
+    if (!responseToDelete) return;
+    deleteQuizResponse(responseToDelete.id);
+    setResponseToDelete(null);
   }
 
   return (
@@ -138,16 +169,58 @@ export default function QuizDetailPage() {
             <span>·</span>
             <span>{quiz.groups.length === 0 ? "All groups" : quiz.groups.join(", ")}</span>
             <span>·</span>
-            <span>{quiz.questions.length} questions</span>
+            <span>
+              {quiz.questions.length} questions ·{" "}
+              {quiz.questions.reduce((sum, q) => sum + q.points, 0)} points
+            </span>
             <Badge variant={isClosed ? "neutral" : "brand"} dot>
               {isClosed ? "Closed" : "Open"}
             </Badge>
           </div>
         </div>
-        <Link href={`/admin/quizzes/${quiz.id}/edit`} className="self-start">
-          <Button variant="secondary">Edit</Button>
-        </Link>
+        <div className="flex items-center gap-2 self-start">
+          <Link href={`/admin/quizzes/${quiz.id}/edit`}>
+            <Button variant="secondary">Edit</Button>
+          </Link>
+          {isClosed ? (
+            <Button variant="secondary" onClick={handleReopenQuiz}>
+              Reopen quiz
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={() => setConfirmOpen(true)}>
+              End quiz
+            </Button>
+          )}
+          {isClosed && (
+            <Button variant="secondary" onClick={() => setDeleteOpen(true)}>
+              Delete quiz
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Share */}
+      <Card className="mb-6 px-5 py-5">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+          Share with students
+        </h2>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={() => setQrOpen(true)}
+            className="shrink-0 self-start transition-opacity hover:opacity-80"
+            aria-label="View larger QR code"
+          >
+            <QRCodeImage path={`/q/${quiz.id}`} size={96} />
+          </button>
+          <div className="min-w-0 flex-1 space-y-2">
+            <ShareLink path={`/q/${quiz.id}`} />
+            <p className="text-xs text-slate-400">
+              Students can scan the QR code or open the link to start.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       {/* Stats */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -158,43 +231,6 @@ export default function QuizDetailPage() {
           value={results.length > 0 ? `${results[0].score}/${results[0].maxScore}` : "—"}
         />
       </div>
-
-      {/* Groups */}
-      <Card className="mb-6 px-5 py-5">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-          Groups
-        </h2>
-        <p className="mb-3 mt-1 text-xs text-slate-400">
-          Click a group to close or reopen its access early.
-        </p>
-        <ul className="space-y-1">
-          {groups.map((g) => {
-            const pastDeadline = isPast(quiz.deadline);
-            const closed = isQuizClosedForGroup(quiz, g);
-            const closedEarly = quiz.closedGroups.includes(g) && !pastDeadline;
-            return (
-              <li key={g}>
-                <button
-                  type="button"
-                  disabled={pastDeadline}
-                  onClick={() => toggleGroup(g)}
-                  className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors ${
-                    pastDeadline ? "cursor-default" : "hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="text-slate-600">{g}</span>
-                  <span className="flex items-center gap-3">
-                    {closedEarly && <Badge variant="warning">Closed early</Badge>}
-                    <Badge variant={closed ? "neutral" : "brand"}>
-                      {closed ? "Closed" : "Open"}
-                    </Badge>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </Card>
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 border-b border-slate-200">
@@ -221,7 +257,7 @@ export default function QuizDetailPage() {
       {/* Questions tab */}
       {tab === "questions" && (
         <div className="space-y-4">
-          {quiz.questions.map((q, i) => (
+          {orderedQuestions.map((q, i) => (
             <QuestionCard key={q.id} question={q} index={i} />
           ))}
         </div>
@@ -242,6 +278,7 @@ export default function QuizDetailPage() {
                     <th className="px-5 py-3 font-medium">Group</th>
                     <th className="px-5 py-3 font-medium">Score</th>
                     <th className="px-5 py-3 font-medium">Submitted</th>
+                    <th className="px-5 py-3 font-medium" />
                   </tr>
                 </thead>
                 <tbody>
@@ -256,6 +293,16 @@ export default function QuizDetailPage() {
                       <td className="px-5 py-4 text-slate-500">
                         {formatDate(r.submittedAt)}
                         {r.late && <span className="ml-2"><Badge variant="warning">Late</Badge></span>}
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setResponseToDelete({ id: r.id, studentName: r.studentName })}
+                          className="text-slate-400 hover:text-red-500"
+                          aria-label="Delete response"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -279,9 +326,19 @@ export default function QuizDetailPage() {
                         </p>
                       </div>
                     </div>
-                    <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
-                      {r.score}/{r.maxScore}
-                    </p>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <p className="text-sm font-semibold tabular-nums text-foreground">
+                        {r.score}/{r.maxScore}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setResponseToDelete({ id: r.id, studentName: r.studentName })}
+                        className="text-slate-400 hover:text-red-500"
+                        aria-label="Delete response"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -289,6 +346,48 @@ export default function QuizDetailPage() {
           )}
         </Card>
       )}
+
+      {/* End quiz confirm modal */}
+      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="End quiz?">
+        <p className="text-sm text-slate-600">
+          This immediately blocks every group from responding. You can reopen it at any time.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button onClick={handleEndQuiz}>End quiz</Button>
+        </div>
+      </Modal>
+
+      {/* Delete quiz confirm modal */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete quiz?">
+        <p className="text-sm text-slate-600">
+          This permanently deletes &quot;{quiz.title}&quot; and all {results.length} of its
+          responses. This cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button variant="danger" onClick={handleDelete}>Delete</Button>
+        </div>
+      </Modal>
+
+      {/* Delete response confirm modal */}
+      <Modal open={!!responseToDelete} onClose={() => setResponseToDelete(null)} title="Delete response?">
+        <p className="text-sm text-slate-600">
+          Delete {responseToDelete?.studentName}&apos;s response? This cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setResponseToDelete(null)}>Cancel</Button>
+          <Button variant="danger" onClick={confirmDeleteResponse}>Delete</Button>
+        </div>
+      </Modal>
+
+      {/* QR code modal */}
+      <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="Scan to start">
+        <div className="flex flex-col items-center gap-4">
+          <QRCodeImage path={`/q/${quiz.id}`} size={240} />
+          <ShareLink path={`/q/${quiz.id}`} />
+        </div>
+      </Modal>
     </div>
   );
 }
