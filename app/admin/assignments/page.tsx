@@ -50,7 +50,7 @@ export default function AssignmentsPage() {
                   <td className="px-5 py-4 text-slate-500">
                     {assignment.deadlines.map((d, i) => (
                       <p key={i} className="whitespace-nowrap">
-                        {d.groups.length >= ALL_GROUPS_COUNT ? "All groups" : d.groups.join(", ")}
+                        {coversAllGroups(d.groups) ? "All groups" : d.groups.join(", ")}
                         {": "}
                         {formatDeadline(d.deadline)}
                       </p>
@@ -82,7 +82,7 @@ export default function AssignmentsPage() {
                 <div className="mt-2 space-y-1 text-xs text-slate-500">
                   {assignment.deadlines.map((d, i) => (
                     <p key={i}>
-                      {d.groups.length >= ALL_GROUPS_COUNT ? "All groups" : d.groups.join(", ")}
+                      {coversAllGroups(d.groups) ? "All groups" : d.groups.join(", ")}
                       {": "}
                       {formatDeadline(d.deadline)}
                     </p>
