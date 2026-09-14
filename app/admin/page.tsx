@@ -1,0 +1,155 @@
+import Link from "next/link";
+import { StatCard } from "@/components/ui/StatCard";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import {
+  ASSIGNMENTS,
+  ASSIGNMENT_SUBMISSIONS,
+  QUIZZES,
+  QUIZ_RESPONSES,
+} from "@/lib/mock-data";
+import { computeLeaderboard } from "@/lib/rankings";
+import { isAssignmentOpen } from "@/lib/assignments";
+import { formatDate, isPast } from "@/lib/format";
+
+export default function AdminOverviewPage() {
+  const activeAssignments = ASSIGNMENTS.filter(isAssignmentOpen).length;
+  const activeQuizzes = QUIZZES.filter((q) => !isPast(q.deadline)).length;
+  const pending = ASSIGNMENT_SUBMISSIONS.filter((s) => !s.graded);
+
+  const gradedPercents = [
+    ...ASSIGNMENT_SUBMISSIONS.filter((s) => s.graded && s.score !== null).map(
+      (s) => (s.score as number) / s.maxScore
+    ),
+    ...QUIZ_RESPONSES.map((r) => r.score / r.maxScore),
+  ];
+  const average =
+    gradedPercents.length > 0
+      ? Math.round(
+          (gradedPercents.reduce((a, b) => a + b, 0) / gradedPercents.length) * 100
+        )
+      : 0;
+
+  const leaderboard = computeLeaderboard().slice(0, 5);
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Overview
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Current state of assignments, quizzes, and grading.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard label="Active assignments" value={String(activeAssignments)} />
+        <StatCard label="Active quizzes" value={String(activeQuizzes)} />
+        <StatCard
+          label="Pending grading"
+          value={String(pending.length)}
+          sublabel={pending.length > 0 ? "Needs your attention" : undefined}
+        />
+        <StatCard label="Class average" value={`${average}%`} />
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <h2 className="text-sm font-semibold text-foreground">
+              Needs grading
+            </h2>
+            <Link
+              href="/admin/assignments"
+              className="text-sm font-medium text-brand hover:underline"
+            >
+              View all
+            </Link>
+          </div>
+
+          {pending.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-slate-400">
+              Nothing waiting on you right now.
+            </p>
+          ) : (
+            <ul>
+              {pending.map((sub) => {
+                const assignment = ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
+                return (
+                  <li
+                    key={sub.id}
+                    className="flex items-start justify-between gap-3 border-b border-slate-50 px-4 py-3 last:border-0 sm:px-5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {sub.studentName}{" "}
+                        <span className="font-normal text-slate-400">
+                          · {sub.group}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {assignment?.title} · submitted {formatDate(sub.submittedAt)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      {sub.late && <Badge variant="warning">Late</Badge>}
+                      <Link
+                        href={`/admin/assignments/${sub.assignmentId}`}
+                        className="text-sm font-medium text-brand hover:underline"
+                      >
+                        Grade
+                      </Link>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <h2 className="text-sm font-semibold text-foreground">
+              Top performers
+            </h2>
+            <Link
+              href="/admin/rankings"
+              className="text-sm font-medium text-brand hover:underline"
+            >
+              Full ranking
+            </Link>
+          </div>
+          <ul>
+            {leaderboard.map((row, i) => (
+              <li
+                key={row.studentId}
+                className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-50 last:border-0 sm:px-5"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="w-4 shrink-0 text-sm font-medium text-slate-400 tabular-nums">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {row.studentName}
+                    </p>
+                    <p className="text-xs text-slate-400">{row.group}</p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold text-foreground tabular-nums">
+                    {row.total}
+                  </p>
+                  {row.bonus > 0 && (
+                    <p className="text-xs text-slate-400">+{row.bonus} bonus</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+    </div>
+  );
+}
