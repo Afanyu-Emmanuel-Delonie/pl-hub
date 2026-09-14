@@ -8,10 +8,10 @@ import { useStore } from "@/lib/store";
 import { isAssignmentOpen } from "@/lib/assignments";
 import { formatDeadline } from "@/lib/format";
 
-const ALL_GROUPS_COUNT = 9;
-
 export default function AssignmentsPage() {
-  const { assignments, submissions } = useStore();
+  const { assignments, submissions, groups } = useStore();
+  const coversAllGroups = (deadlineGroups: string[]) =>
+    groups.length > 0 && deadlineGroups.length >= groups.length;
 
   return (
     <div>

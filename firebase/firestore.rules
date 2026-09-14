@@ -25,11 +25,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Roster, bonus points, attendance, and CA settings are staff-only —
-    // nothing on the public student pages ever reads or writes these.
+    // Roster: students register themselves the moment they submit a quiz
+    // or assignment (name + group only), so writes stay open the same way
+    // submissions/responses do. Only staff can read the compiled roster.
     match /students/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if true;
     }
+
+    // Bonus points, attendance, and CA settings are staff-only — nothing on
+    // the public student pages ever reads or writes these.
     match /bonusAwards/{id} {
       allow read, write: if signedIn();
     }
@@ -39,8 +44,13 @@ service cloud.firestore {
     match /settings/{id} {
       allow read, write: if signedIn();
     }
+
+    // Group names are just a reference list, not sensitive — students need
+    // to read them to pick their real group on a quiz/assignment with no
+    // explicit group selection. Only staff can add/rename/remove groups.
     match /groups/{id} {
-      allow read, write: if signedIn();
+      allow read: if true;
+      allow write: if signedIn();
     }
   }
 }

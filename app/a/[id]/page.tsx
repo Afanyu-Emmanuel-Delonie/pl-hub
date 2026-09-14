@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { submitAssignment } from "@/lib/db";
+import { submitAssignment, upsertStudent } from "@/lib/db";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { CodeBlock } from "@/components/ui/CodeBlock";
@@ -92,20 +92,25 @@ function SubmitPanel({
     if (Object.values(nextErrors).some(Boolean)) return;
 
     setSaving(true);
-    await submitAssignment({
-      id: `${assignment.id}__${studentId.trim().toUpperCase()}`,
-      assignmentId: assignment.id,
-      studentId: studentId.trim().toUpperCase(),
-      studentName: name.trim(),
-      group,
-      githubLink: githubLink.trim(),
-      submittedAt: new Date().toISOString(),
-      late: false,
-      graded: false,
-      score: null,
-      maxScore: assignment.maxScore,
-      comment: "",
-    });
+    const normalizedId = studentId.trim().toUpperCase();
+    const studentName = name.trim();
+    await Promise.all([
+      submitAssignment({
+        id: `${assignment.id}__${normalizedId}`,
+        assignmentId: assignment.id,
+        studentId: normalizedId,
+        studentName,
+        group,
+        githubLink: githubLink.trim(),
+        submittedAt: new Date().toISOString(),
+        late: false,
+        graded: false,
+        score: null,
+        maxScore: assignment.maxScore,
+        comment: "",
+      }),
+      upsertStudent({ id: normalizedId, name: studentName, group }),
+    ]);
     setSaving(false);
     setSubmitted(true);
     onSubmitted();

@@ -12,10 +12,10 @@ import { isQuizOpen } from "@/lib/quizzes";
 import { formatDate } from "@/lib/format";
 
 export default function AdminOverviewPage() {
-  const { assignments, submissions, quizzes, quizResponses, students, bonusAwards, loading } = useStore();
+  const { assignments, submissions, quizzes, quizResponses, students, bonusAwards, groups, loading } = useStore();
 
   const activeAssignments = assignments.filter(isAssignmentOpen).length;
-  const activeQuizzes = quizzes.filter(isQuizOpen).length;
+  const activeQuizzes = quizzes.filter((q) => isQuizOpen(q, groups)).length;
   const pending = submissions.filter((s) => !s.graded);
 
   const gradedPercents = [
