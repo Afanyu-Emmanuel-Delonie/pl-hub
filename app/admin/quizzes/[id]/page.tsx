@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { StatCard } from "@/components/ui/StatCard";
 import { CodeBlock } from "@/components/ui/CodeBlock";
-import { Modal } from "@/components/ui/Modal";
-import { QUIZZES, QUIZ_RESPONSES, setQuizClosed } from "@/lib/mock-data";
+import { QUIZZES, QUIZ_RESPONSES, setQuizClosedGroups } from "@/lib/mock-data";
+import { isQuizClosedForGroup, isQuizOpen, quizGroups } from "@/lib/quizzes";
 import { formatDate, formatDeadline, isPast } from "@/lib/format";
 import type { QuizQuestion } from "@/lib/types";
 
@@ -83,7 +83,6 @@ function QuestionCard({ question, index }: { question: QuizQuestion; index: numb
 export default function QuizDetailPage() {
   const params = useParams<{ id: string }>();
   const [tab, setTab] = useState<Tab>("questions");
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [, forceUpdate] = useState(0);
 
   const quiz = useMemo(() => QUIZZES.find((q) => q.id === params.id), [params.id]);
@@ -106,7 +105,8 @@ export default function QuizDetailPage() {
     );
   }
 
-  const isClosed = quiz.closed || isPast(quiz.deadline);
+  const isClosed = !isQuizOpen(quiz);
+  const groups = quizGroups(quiz);
 
   const average =
     results.length > 0
@@ -115,10 +115,12 @@ export default function QuizDetailPage() {
         )
       : 0;
 
-  function handleEndQuiz() {
-    setQuizClosed(quiz!.id);
+  function toggleGroup(group: string) {
+    const closedGroups = quiz!.closedGroups.includes(group)
+      ? quiz!.closedGroups.filter((g) => g !== group)
+      : [...quiz!.closedGroups, group];
+    setQuizClosedGroups(quiz!.id, closedGroups);
     forceUpdate((n) => n + 1);
-    setConfirmOpen(false);
   }
 
   return (
@@ -142,16 +144,9 @@ export default function QuizDetailPage() {
             </Badge>
           </div>
         </div>
-        <div className="flex items-center gap-2 self-start">
-          <Link href={`/admin/quizzes/${quiz.id}/edit`}>
-            <Button variant="secondary">Edit</Button>
-          </Link>
-          {!isClosed && (
-            <Button variant="secondary" onClick={() => setConfirmOpen(true)}>
-              End quiz
-            </Button>
-          )}
-        </div>
+        <Link href={`/admin/quizzes/${quiz.id}/edit`} className="self-start">
+          <Button variant="secondary">Edit</Button>
+        </Link>
       </div>
 
       {/* Stats */}
@@ -163,6 +158,43 @@ export default function QuizDetailPage() {
           value={results.length > 0 ? `${results[0].score}/${results[0].maxScore}` : "—"}
         />
       </div>
+
+      {/* Groups */}
+      <Card className="mb-6 px-5 py-5">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+          Groups
+        </h2>
+        <p className="mb-3 mt-1 text-xs text-slate-400">
+          Click a group to close or reopen its access early.
+        </p>
+        <ul className="space-y-1">
+          {groups.map((g) => {
+            const pastDeadline = isPast(quiz.deadline);
+            const closed = isQuizClosedForGroup(quiz, g);
+            const closedEarly = quiz.closedGroups.includes(g) && !pastDeadline;
+            return (
+              <li key={g}>
+                <button
+                  type="button"
+                  disabled={pastDeadline}
+                  onClick={() => toggleGroup(g)}
+                  className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors ${
+                    pastDeadline ? "cursor-default" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="text-slate-600">{g}</span>
+                  <span className="flex items-center gap-3">
+                    {closedEarly && <Badge variant="warning">Closed early</Badge>}
+                    <Badge variant={closed ? "neutral" : "brand"}>
+                      {closed ? "Closed" : "Open"}
+                    </Badge>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 border-b border-slate-200">
@@ -257,17 +289,6 @@ export default function QuizDetailPage() {
           )}
         </Card>
       )}
-
-      {/* End quiz confirm modal */}
-      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="End quiz?">
-        <p className="text-sm text-slate-600">
-          This will immediately close the quiz for all students. This cannot be undone.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button onClick={handleEndQuiz}>End quiz</Button>
-        </div>
-      </Modal>
     </div>
   );
 }

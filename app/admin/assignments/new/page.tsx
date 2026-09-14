@@ -128,6 +128,7 @@ export default function NewAssignmentPage() {
       content: blocks,
       deadlines: validDeadlines,
       maxScore,
+      closedGroups: [],
       createdAt: new Date().toISOString(),
     };
 

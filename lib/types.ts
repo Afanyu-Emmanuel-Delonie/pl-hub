@@ -23,7 +23,7 @@ export type Assignment = {
   content: ContentBlock[];
   deadlines: GroupDeadline[];
   maxScore: number;
-  closed: boolean;
+  closedGroups: Group[]; // groups manually blocked from submitting, ahead of their deadline
   createdAt: string;
 };
 
@@ -60,7 +60,7 @@ export type Quiz = {
   deadline: string;
   groups: Group[];
   questions: QuizQuestion[];
-  closed: boolean;
+  closedGroups: Group[]; // groups manually blocked from responding, ahead of the deadline
   createdAt: string;
 };
 

@@ -115,7 +115,7 @@ CREATE TABLE order_items (
       { groups: ["Group D"], deadline: "2026-09-23T23:59:00" },
     ],
     maxScore: 20,
-    closed: false,
+    closedGroups: [],
     createdAt: "2026-08-28T09:00:00",
   },
   {
@@ -125,7 +125,7 @@ CREATE TABLE order_items (
     content: [],
     deadlines: [{ groups: [...GROUPS], deadline: "2026-09-12T23:59:00" }],
     maxScore: 20,
-    closed: false,
+    closedGroups: [],
     createdAt: "2026-09-05T09:00:00",
   },
 ];
@@ -139,9 +139,9 @@ export function updateAssignment(updated: Assignment) {
   if (idx !== -1) ASSIGNMENTS[idx] = updated;
 }
 
-export function setAssignmentClosed(id: string, closed: boolean) {
+export function setAssignmentClosedGroups(id: string, closedGroups: string[]) {
   const a = ASSIGNMENTS.find((a) => a.id === id);
-  if (a) a.closed = closed;
+  if (a) a.closedGroups = closedGroups;
 }
 
 export function addQuiz(quiz: Quiz) {
@@ -153,9 +153,9 @@ export function updateQuiz(updated: Quiz) {
   if (idx !== -1) QUIZZES[idx] = updated;
 }
 
-export function setQuizClosed(id: string, closed: boolean) {
+export function setQuizClosedGroups(id: string, closedGroups: string[]) {
   const q = QUIZZES.find((q) => q.id === id);
-  if (q) q.closed = closed;
+  if (q) q.closedGroups = closedGroups;
 }
 
 export const ASSIGNMENT_SUBMISSIONS: AssignmentSubmission[] = [
@@ -237,7 +237,7 @@ export const QUIZZES: Quiz[] = [
     title: "Quiz 1 — Normalization",
     deadline: "2026-09-08T23:59:00",
     groups: [],
-    closed: true,
+    closedGroups: [],
     createdAt: "2026-09-01T09:00:00",
     questions: [
       {
@@ -261,7 +261,7 @@ export const QUIZZES: Quiz[] = [
     title: "Quiz 2 — Indexing & Joins",
     deadline: "2026-09-18T23:59:00",
     groups: [],
-    closed: false,
+    closedGroups: [],
     createdAt: "2026-09-11T09:00:00",
     questions: [
       {
