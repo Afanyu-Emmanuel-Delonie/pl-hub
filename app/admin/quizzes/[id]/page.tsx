@@ -102,7 +102,7 @@ export default function QuizDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [responseToDelete, setResponseToDelete] = useState<{ id: string; studentName: string } | null>(null);
-  const { quizzes, responses, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useQuizStore();
+  const { quizzes, responses, groups, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useQuizStore();
 
   const quiz = useMemo(() => quizzes.find((q) => q.id === params.id), [quizzes, params.id]);
   const results = useMemo(
@@ -124,7 +124,7 @@ export default function QuizDetailPage() {
     );
   }
 
-  const isClosed = !isQuizOpen(quiz);
+  const isClosed = !isQuizOpen(quiz, groups);
   const orderedQuestions = orderQuestions(quiz.questions);
 
   const average =

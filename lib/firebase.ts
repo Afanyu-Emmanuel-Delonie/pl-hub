@@ -7,7 +7,7 @@ import {
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
+  persistentSingleTabManager,
 } from "firebase/firestore";
 
 const config = {
@@ -32,13 +32,20 @@ export const auth = getAuth(firebaseApp);
 // student reopening the same quiz/assignment link is served from the local
 // cache instead of re-reading the document from Firestore every time. This
 // is the single biggest lever against read volume when many students hit
-// the same handful of documents. persistentMultipleTabManager lets several
-// open tabs in the same browser share one cache instead of each keeping its
-// own copy and its own listener.
+// the same handful of documents.
+//
+// persistentSingleTabManager (rather than the multi-tab variant): each tab
+// keeps its own isolated cache instead of several tabs electing one
+// "primary" tab to coordinate cache writes/garbage collection. The typical
+// user here (a student on one quiz link, a TA on one dashboard tab) never
+// needed cross-tab sharing, and the multi-tab manager logs a harmless but
+// alarming-looking "Failed to obtain primary lease for action 'Collect
+// garbage'" console error from every non-primary tab — this avoids that
+// class of noise entirely while keeping the actual caching benefit.
 function initDb() {
   try {
     return initializeFirestore(firebaseApp, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
     });
   } catch {
     // Already initialized (e.g. re-executed by Fast Refresh in dev, or a

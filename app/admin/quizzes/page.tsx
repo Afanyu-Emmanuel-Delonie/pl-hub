@@ -9,7 +9,7 @@ import { isQuizOpen } from "@/lib/quizzes";
 import { formatDeadline } from "@/lib/format";
 
 export default function QuizzesPage() {
-  const { quizzes, responses } = useQuizStore();
+  const { quizzes, responses, groups } = useQuizStore();
 
   return (
     <div>
@@ -39,7 +39,7 @@ export default function QuizzesPage() {
           <tbody>
             {quizzes.map((quiz) => {
               const count = responses.filter((r) => r.quizId === quiz.id).length;
-              const closed = !isQuizOpen(quiz);
+              const closed = !isQuizOpen(quiz, groups);
               return (
                 <tr key={quiz.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-5 py-4">
@@ -71,7 +71,7 @@ export default function QuizzesPage() {
         <div className="divide-y divide-slate-50 md:hidden">
           {quizzes.map((quiz) => {
             const count = responses.filter((r) => r.quizId === quiz.id).length;
-            const closed = !isQuizOpen(quiz);
+            const closed = !isQuizOpen(quiz, groups);
             return (
               <Link
                 key={quiz.id}

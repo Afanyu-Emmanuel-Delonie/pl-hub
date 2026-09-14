@@ -27,6 +27,7 @@ import {
   patchAssignment,
   submitAssignment,
   gradeSubmission,
+  removeSubmission,
   createBonusAward,
   setAttendance as setAttendanceDoc,
   saveCAWeights,
@@ -77,6 +78,7 @@ type AppStore = {
   toggleAssignmentGroup: (id: string, group: string, closedGroups: string[]) => Promise<void>;
   addSubmission: (submission: AssignmentSubmission) => Promise<void>;
   saveGrade: (id: string, score: number, comment: string) => Promise<void>;
+  deleteSubmission: (id: string) => Promise<void>;
 
   // bonus
   addBonusAward: (award: BonusAward) => Promise<void>;
@@ -135,8 +137,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const endQuiz = useCallback(async (id: string) => {
     const quiz = quizzes.find((q) => q.id === id);
     if (!quiz) return;
-    await patchQuiz(id, { closedGroups: quizGroups(quiz) });
-  }, [quizzes]);
+    await patchQuiz(id, { closedGroups: quizGroups(quiz, groups) });
+  }, [quizzes, groups]);
 
   const reopenQuiz = useCallback(async (id: string) => {
     const newDeadline = new Date();
@@ -163,6 +165,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     (id: string, score: number, comment: string) => gradeSubmission(id, score, comment),
     []
   );
+  const deleteSubmission = useCallback((id: string) => removeSubmission(id), []);
 
   // ── groups ──────────────────────────────────────────────────────────────────
   const addGroup = useCallback((name: string) => createGroup(name), []);
@@ -196,7 +199,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         attendance, caWeights, groups, loading,
         addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, addQuizResponse, deleteQuizResponse,
         addAssignment, updateAssignment, deleteAssignment, toggleAssignmentGroup,
-        addSubmission, saveGrade, addBonusAward,
+        addSubmission, saveGrade, deleteSubmission, addBonusAward,
         setAttendance, saveCAWeights: saveCAWeightsAction,
         addGroup, renameGroup, removeGroup,
       }}
@@ -214,6 +217,6 @@ export function useStore() {
 
 // backwards-compat alias used by quiz pages
 export function useQuizStore() {
-  const { quizzes, quizResponses: responses, addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useStore();
-  return { quizzes, responses, addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse };
+  const { quizzes, quizResponses: responses, groups, addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useStore();
+  return { quizzes, responses, groups, addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse };
 }

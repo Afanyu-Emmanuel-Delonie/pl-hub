@@ -145,6 +145,10 @@ export async function gradeSubmission(
   });
 }
 
+export async function removeSubmission(id: string) {
+  await deleteDoc(doc(db, "assignmentSubmissions", id));
+}
+
 // ── students ──────────────────────────────────────────────────────────────────
 
 export function subscribeStudents(
@@ -156,6 +160,15 @@ export function subscribeStudents(
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Student))),
     (err) => { logSnapshotError("students")(err); onError?.(); }
   );
+}
+
+// Registers/updates a student the moment they submit a quiz or assignment —
+// this is the only place the roster gets populated, so Students, Rankings,
+// and the Profile CA table all show real people without the TA maintaining
+// a separate list by hand. Safe to call on every submission: merges in the
+// latest name/group rather than duplicating or overwriting other fields.
+export async function upsertStudent(student: Student) {
+  await setDoc(doc(db, "students", student.id), student, { merge: true });
 }
 
 // ── bonus awards ──────────────────────────────────────────────────────────────

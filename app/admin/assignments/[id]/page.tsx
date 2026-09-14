@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +19,7 @@ import { formatDate, formatDeadline, isPast } from "@/lib/format";
 
 type Tab = "details" | "submissions";
 
-function GradeRow({ submission }: { submission: AssignmentSubmission }) {
+function GradeRow({ submission, onDelete }: { submission: AssignmentSubmission; onDelete: () => void }) {
   const { saveGrade } = useStore();
   const [score, setScore] = useState<string>(submission.score === null ? "" : String(submission.score));
   const [comment, setComment] = useState(submission.comment);
@@ -59,19 +60,24 @@ function GradeRow({ submission }: { submission: AssignmentSubmission }) {
           placeholder="Optional comment" className="min-w-[180px]" />
       </td>
       <td className="px-5 py-4 text-right">
-        {saved ? (
-          <span className="text-xs font-medium text-slate-400">Saved</span>
-        ) : (
-          <Button size="sm" onClick={handleSave} disabled={saving || score === ""}>
-            {saving ? "…" : "Save"}
-          </Button>
-        )}
+        <div className="flex items-center justify-end gap-3">
+          {saved ? (
+            <span className="text-xs font-medium text-slate-400">Saved</span>
+          ) : (
+            <Button size="sm" onClick={handleSave} disabled={saving || score === ""}>
+              {saving ? "…" : "Save"}
+            </Button>
+          )}
+          <button type="button" onClick={onDelete} className="text-slate-400 hover:text-red-500" aria-label="Delete submission">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </td>
     </tr>
   );
 }
 
-function GradeCard({ submission }: { submission: AssignmentSubmission }) {
+function GradeCard({ submission, onDelete }: { submission: AssignmentSubmission; onDelete: () => void }) {
   const { saveGrade } = useStore();
   const [score, setScore] = useState<string>(submission.score === null ? "" : String(submission.score));
   const [comment, setComment] = useState(submission.comment);
@@ -92,7 +98,12 @@ function GradeCard({ submission }: { submission: AssignmentSubmission }) {
           <p className="font-medium text-foreground">{submission.studentName}</p>
           <p className="text-xs text-slate-400">{submission.studentId} · {submission.group}</p>
         </div>
-        {submission.late && <Badge variant="warning">Late</Badge>}
+        <div className="flex items-center gap-2">
+          {submission.late && <Badge variant="warning">Late</Badge>}
+          <button type="button" onClick={onDelete} className="text-slate-400 hover:text-red-500" aria-label="Delete submission">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <a href={submission.githubLink} target="_blank" rel="noreferrer"
         className="mt-2 block break-all font-mono text-xs text-brand hover:underline">
@@ -122,9 +133,10 @@ function GradeCard({ submission }: { submission: AssignmentSubmission }) {
 export default function AssignmentDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { assignments, submissions, deleteAssignment, toggleAssignmentGroup } = useStore();
+  const { assignments, submissions, deleteAssignment, toggleAssignmentGroup, deleteSubmission } = useStore();
   const [tab, setTab] = useState<Tab>("details");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [submissionToDelete, setSubmissionToDelete] = useState<{ id: string; studentName: string } | null>(null);
 
   const assignment = useMemo(() => assignments.find((a) => a.id === params.id), [assignments, params.id]);
   const subs = useMemo(() => submissions.filter((s) => s.assignmentId === params.id), [submissions, params.id]);
@@ -152,6 +164,12 @@ export default function AssignmentDetailPage() {
   async function handleDelete() {
     await deleteAssignment(assignment!.id);
     router.push("/admin/assignments");
+  }
+
+  async function confirmDeleteSubmission() {
+    if (!submissionToDelete) return;
+    await deleteSubmission(submissionToDelete.id);
+    setSubmissionToDelete(null);
   }
 
   return (
@@ -256,11 +274,23 @@ export default function AssignmentDetailPage() {
                       <th className="px-5 py-3" />
                     </tr>
                   </thead>
-                  <tbody>{subs.map((s) => <GradeRow key={s.id} submission={s} />)}</tbody>
+                  <tbody>{subs.map((s) => (
+                    <GradeRow
+                      key={s.id}
+                      submission={s}
+                      onDelete={() => setSubmissionToDelete({ id: s.id, studentName: s.studentName })}
+                    />
+                  ))}</tbody>
                 </table>
               </div>
               <div className="divide-y divide-slate-50 md:hidden">
-                {subs.map((s) => <GradeCard key={s.id} submission={s} />)}
+                {subs.map((s) => (
+                  <GradeCard
+                    key={s.id}
+                    submission={s}
+                    onDelete={() => setSubmissionToDelete({ id: s.id, studentName: s.studentName })}
+                  />
+                ))}
               </div>
             </>
           )}
@@ -274,6 +304,16 @@ export default function AssignmentDetailPage() {
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Cancel</Button>
           <Button variant="danger" onClick={handleDelete}>Delete</Button>
+        </div>
+      </Modal>
+
+      <Modal open={!!submissionToDelete} onClose={() => setSubmissionToDelete(null)} title="Delete submission?">
+        <p className="text-sm text-slate-600">
+          Delete {submissionToDelete?.studentName}&apos;s submission? This cannot be undone.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setSubmissionToDelete(null)}>Cancel</Button>
+          <Button variant="danger" onClick={confirmDeleteSubmission}>Delete</Button>
         </div>
       </Modal>
     </div>

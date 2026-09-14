@@ -1,4 +1,3 @@
-import { GROUPS } from "./mock-data";
 import type { Quiz, QuizQuestion } from "./types";
 import { isPast } from "./format";
 
@@ -27,9 +26,11 @@ export function shuffleQuestions(questions: QuizQuestion[]): QuizQuestion[] {
   return [...regular, ...bonus];
 }
 
-// Groups the quiz applies to — empty selection on the quiz means "every group".
-export function quizGroups(quiz: Quiz): string[] {
-  return quiz.groups.length === 0 ? GROUPS : quiz.groups;
+// Groups the quiz applies to — empty selection on the quiz means "every
+// group", resolved against the system's actual recorded groups rather than
+// a fixed list, so a newly added/renamed group is reflected immediately.
+export function quizGroups(quiz: Quiz, allGroups: string[]): string[] {
+  return quiz.groups.length === 0 ? allGroups : quiz.groups;
 }
 
 export function isQuizClosedForGroup(quiz: Quiz, group: string): boolean {
@@ -38,6 +39,6 @@ export function isQuizClosedForGroup(quiz: Quiz, group: string): boolean {
 }
 
 // Open overall if at least one covered group can still respond.
-export function isQuizOpen(quiz: Quiz): boolean {
-  return quizGroups(quiz).some((g) => !isQuizClosedForGroup(quiz, g));
+export function isQuizOpen(quiz: Quiz, allGroups: string[]): boolean {
+  return quizGroups(quiz, allGroups).some((g) => !isQuizClosedForGroup(quiz, g));
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { submitQuizResponse } from "@/lib/db";
+import { submitQuizResponse, subscribeGroups, upsertStudent } from "@/lib/db";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { CodeBlock } from "@/components/ui/CodeBlock";
@@ -61,6 +61,7 @@ export default function PublicQuizPage() {
   const [current, setCurrent] = useState(0);
   const [orderedQuestions, setOrderedQuestions] = useState<QuizQuestion[]>([]);
   const [result, setResult] = useState<{ score: number; maxScore: number } | null>(null);
+  const [allGroups, setAllGroups] = useState<string[]>([]);
   const unsubQuizRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -70,6 +71,13 @@ export default function PublicQuizPage() {
     unsubQuizRef.current = unsub;
     return unsub;
   }, [params.id]);
+
+  // The groups a quiz with no explicit selection applies to should reflect
+  // whatever groups actually exist in the system, not a fixed placeholder
+  // list — so this pulls the live roster instead of guessing at names.
+  useEffect(() => {
+    return subscribeGroups((data) => setAllGroups(data));
+  }, []);
 
   if (quiz === undefined) {
     return (
@@ -87,8 +95,8 @@ export default function PublicQuizPage() {
     );
   }
 
-  const groups = quizGroups(quiz);
-  const quizOpen = isQuizOpen(quiz);
+  const groups = quizGroups(quiz, allGroups);
+  const quizOpen = isQuizOpen(quiz, allGroups);
   const groupClosed = group !== "" && isQuizClosedForGroup(quiz, group);
   const question = orderedQuestions[current];
   const totalQ = quiz.questions.length;
@@ -136,17 +144,22 @@ export default function PublicQuizPage() {
       regular.reduce((sum, q) => sum + scoreAnswer(q, answers[q.id]), 0) +
       bonus.reduce((sum, q) => sum + scoreAnswer(q, answers[q.id]), 0);
     const maxScore = regular.length;
-    await submitQuizResponse({
-      id: `${quiz!.id}__${studentId.trim().toUpperCase()}`,
-      quizId: quiz!.id,
-      studentId: studentId.trim().toUpperCase(),
-      studentName: name.trim(),
-      group,
-      score,
-      maxScore,
-      submittedAt: new Date().toISOString(),
-      late: false,
-    });
+    const normalizedId = studentId.trim().toUpperCase();
+    const studentName = name.trim();
+    await Promise.all([
+      submitQuizResponse({
+        id: `${quiz!.id}__${normalizedId}`,
+        quizId: quiz!.id,
+        studentId: normalizedId,
+        studentName,
+        group,
+        score,
+        maxScore,
+        submittedAt: new Date().toISOString(),
+        late: false,
+      }),
+      upsertStudent({ id: normalizedId, name: studentName, group }),
+    ]);
     setResult({ score, maxScore });
     setStep("done");
     // No more updates matter to this student once they've submitted — free
