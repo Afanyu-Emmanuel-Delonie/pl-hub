@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { Clock } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { submitQuizResponse, subscribeGroups, upsertStudent } from "@/lib/db";
@@ -17,6 +18,9 @@ import type { Quiz, QuizQuestion } from "@/lib/types";
 type Step = "intro" | "answering" | "done";
 type Answer = number[] | string;
 
+// Number of tab-switches allowed (with warnings) before the quiz auto-submits.
+const MAX_TAB_SWITCHES = 3;
+
 function isAnswered(question: QuizQuestion, answer: Answer | undefined) {
   if (question.type === "short-answer") return typeof answer === "string" && answer.trim() !== "";
   if (!Array.isArray(answer)) return false;
@@ -31,6 +35,52 @@ function scoreAnswer(question: QuizQuestion, answer: Answer | undefined): number
   const correct = [...question.correctIndexes].sort().join(",");
   const given = [...answer].sort().join(",");
   return correct === given ? 1 : 0;
+}
+
+function WaitingForStart({ title }: { title: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
+      <div className="relative mx-auto mb-6 flex h-16 w-16 items-center justify-center">
+        <span className="absolute inset-0 animate-ping rounded-full bg-brand-tint" />
+        <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-brand-tint">
+          <Clock className="h-7 w-7 text-brand" />
+        </span>
+      </div>
+      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quiz</p>
+      <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">{title}</h1>
+      <p className="mt-3 text-sm text-slate-500">Waiting for your instructor to start the quiz…</p>
+      <div className="mt-6 flex items-center justify-center gap-1.5">
+        <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.3s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.15s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-brand" />
+      </div>
+      <p className="mt-6 text-xs text-slate-400">This page updates automatically — no need to refresh.</p>
+    </div>
+  );
+}
+
+// Doesn't stop a screenshot — nothing rendered by a webpage can — but stamps
+// every question with the student's identity so a leaked screenshot is
+// traceable back to whoever took it. Purely visual: pointer-events-none so
+// it never intercepts clicks, and it sits behind the select-none content.
+function Watermark({ text }: { text: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden select-none"
+    >
+      <div className="grid h-full w-full grid-cols-2 content-between gap-y-10 p-3 opacity-[0.07]">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <span
+            key={i}
+            className="whitespace-nowrap text-xs font-semibold text-slate-900 [transform:rotate(-22deg)]"
+          >
+            {text}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
@@ -62,7 +112,11 @@ export default function PublicQuizPage() {
   const [orderedQuestions, setOrderedQuestions] = useState<QuizQuestion[]>([]);
   const [result, setResult] = useState<{ score: number; maxScore: number } | null>(null);
   const [allGroups, setAllGroups] = useState<string[]>([]);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
   const unsubQuizRef = useRef<(() => void) | null>(null);
+  const tabSwitchCountRef = useRef(0);
+  const autoSubmitLockRef = useRef(false);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "quizzes", params.id), (snap) => {
@@ -78,6 +132,30 @@ export default function PublicQuizPage() {
   useEffect(() => {
     return subscribeGroups((data) => setAllGroups(data));
   }, []);
+
+  // Anti-cheating: switching away from the tab more than twice while
+  // answering auto-submits whatever they've answered so far. Only armed
+  // during "answering" — leaving before starting or after submitting
+  // doesn't count. A ref (not the state) drives the actual decision so the
+  // handler always sees the true running count, not a stale render's copy.
+  useEffect(() => {
+    if (step !== "answering") return;
+
+    function handleVisibilityChange() {
+      if (!document.hidden) return;
+      tabSwitchCountRef.current += 1;
+      const count = tabSwitchCountRef.current;
+      setTabSwitchCount(count);
+      if (count > MAX_TAB_SWITCHES && !autoSubmitLockRef.current) {
+        autoSubmitLockRef.current = true;
+        handleSubmit(true, count);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   if (quiz === undefined) {
     return (
@@ -135,7 +213,7 @@ export default function PublicQuizPage() {
     setStep("answering");
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(auto = false, switchCount = tabSwitchCountRef.current) {
     const regular = quiz!.questions.filter((q) => !q.isBonus);
     const bonus = quiz!.questions.filter((q) => q.isBonus);
     // Bonus questions add to the score as extra credit but never inflate
@@ -157,10 +235,13 @@ export default function PublicQuizPage() {
         maxScore,
         submittedAt: new Date().toISOString(),
         late: false,
+        autoSubmitted: auto,
+        tabSwitchCount: switchCount,
       }),
       upsertStudent({ id: normalizedId, name: studentName, group }),
     ]);
     setResult({ score, maxScore });
+    setAutoSubmitted(auto);
     setStep("done");
     // No more updates matter to this student once they've submitted — free
     // the connection instead of leaving it open until the tab is closed.
@@ -186,7 +267,9 @@ export default function PublicQuizPage() {
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
         <div className="w-full max-w-lg">
 
-          {!quizOpen && step !== "done" && (
+          {!quiz.started && step !== "done" && <WaitingForStart title={quiz.title} />}
+
+          {quiz.started && !quizOpen && step !== "done" && (
             <div className="rounded-xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
                 <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -242,55 +325,76 @@ export default function PublicQuizPage() {
           )}
 
           {step === "answering" && question && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <Watermark text={`${name.trim()} · ${studentId.trim().toUpperCase()}`} />
               <div className="px-6 pt-6">
                 <ProgressBar current={current + 1} total={totalQ} />
               </div>
               <div className="px-6 pb-6">
-                <div className="mb-5 flex items-start gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
-                    {current + 1}
-                  </span>
-                  <div>
-                    <p className="pt-0.5 text-base font-medium leading-relaxed text-foreground">{question.text}</p>
-                    {question.isBonus && (
-                      <span className="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        Bonus · optional
-                      </span>
-                    )}
+                {tabSwitchCount > 0 && tabSwitchCount <= MAX_TAB_SWITCHES && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                    Warning: switching away from this tab isn&apos;t allowed during the quiz
+                    ({tabSwitchCount} of {MAX_TAB_SWITCHES}).{" "}
+                    {tabSwitchCount === MAX_TAB_SWITCHES
+                      ? "Doing it once more submits your quiz automatically."
+                      : "Repeated switching will submit your quiz automatically."}
                   </div>
+                )}
+                {/* Question content is not selectable/copyable — deters lifting
+                    questions to share or search elsewhere. This can't stop a
+                    screenshot or a second device photographing the screen —
+                    no website can block those — only copy/select via the page. */}
+                <div
+                  className="select-none"
+                  onCopy={(e) => e.preventDefault()}
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  <div className="mb-5 flex items-start gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+                      {current + 1}
+                    </span>
+                    <div>
+                      <p className="pt-0.5 text-base font-medium leading-relaxed text-foreground">{question.text}</p>
+                      {question.isBonus && (
+                        <span className="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Bonus · optional
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {question.type === "multi-select" && (
+                    <p className="mb-3 text-xs font-medium text-slate-400">
+                      Select exactly {question.correctIndexes.length}
+                      {(() => {
+                        const picked = ((answers[question.id] as number[] | undefined) ?? []).length;
+                        return picked > 0 ? ` (${picked} selected)` : "";
+                      })()}
+                    </p>
+                  )}
+                  {question.codeBlock && (
+                    <div className="mb-4">
+                      <CodeBlock code={question.codeBlock.value} label={question.codeBlock.language ?? "SQL"} />
+                    </div>
+                  )}
+                  {question.type !== "short-answer" && (
+                    <div className="space-y-2.5">
+                      {question.options.map((opt, idx) => {
+                        const selected = ((answers[question.id] as number[] | undefined) ?? []).includes(idx);
+                        return (
+                          <button key={idx} type="button" onClick={() => toggleChoice(question, idx)}
+                            className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all ${selected ? "border-brand bg-brand-tint font-medium text-brand shadow-sm" : "border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}>
+                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${selected ? "border-brand bg-brand text-white" : "border-slate-300 text-slate-400"}`}>
+                              {String.fromCharCode(65 + idx)}
+                            </span>
+                            {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                {question.type === "multi-select" && (
-                  <p className="mb-3 text-xs font-medium text-slate-400">
-                    Select exactly {question.correctIndexes.length}
-                    {(() => {
-                      const picked = ((answers[question.id] as number[] | undefined) ?? []).length;
-                      return picked > 0 ? ` (${picked} selected)` : "";
-                    })()}
-                  </p>
-                )}
-                {question.codeBlock && (
-                  <div className="mb-4">
-                    <CodeBlock code={question.codeBlock.value} label={question.codeBlock.language ?? "SQL"} />
-                  </div>
-                )}
-                {question.type === "short-answer" ? (
+                {question.type === "short-answer" && (
                   <Input value={(answers[question.id] as string) ?? ""} onChange={(e) => setAnswer(question.id, e.target.value)} placeholder="Type your answer…" />
-                ) : (
-                  <div className="space-y-2.5">
-                    {question.options.map((opt, idx) => {
-                      const selected = ((answers[question.id] as number[] | undefined) ?? []).includes(idx);
-                      return (
-                        <button key={idx} type="button" onClick={() => toggleChoice(question, idx)}
-                          className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all ${selected ? "border-brand bg-brand-tint font-medium text-brand shadow-sm" : "border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}>
-                          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${selected ? "border-brand bg-brand text-white" : "border-slate-300 text-slate-400"}`}>
-                            {String.fromCharCode(65 + idx)}
-                          </span>
-                          {opt}
-                        </button>
-                      );
-                    })}
-                  </div>
                 )}
                 <div className="mt-6 flex items-center justify-between">
                   <button type="button" onClick={() => setCurrent((c) => Math.max(c - 1, 0))} disabled={current === 0}
@@ -317,7 +421,15 @@ export default function PublicQuizPage() {
                     {scorePct}%
                   </span>
                 </div>
-                <h2 className="text-lg font-semibold text-foreground">Quiz submitted</h2>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {autoSubmitted ? "Quiz ended automatically" : "Quiz submitted"}
+                </h2>
+                {autoSubmitted && (
+                  <p className="mt-1 text-sm text-slate-500">
+                    You switched away from this tab more than twice, which isn&apos;t allowed
+                    during the quiz — your answers up to that point were submitted for you.
+                  </p>
+                )}
                 <p className="mt-1 text-sm text-slate-500">
                   You scored <span className="font-semibold text-foreground">{result.score}</span> out of{" "}
                   <span className="font-semibold text-foreground">{result.maxScore}</span>

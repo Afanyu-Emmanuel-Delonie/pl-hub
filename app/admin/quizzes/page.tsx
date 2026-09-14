@@ -5,8 +5,11 @@ import { Card } from "@/components/ui/Card";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Badge } from "@/components/ui/Badge";
 import { useQuizStore } from "@/lib/store";
-import { isQuizOpen } from "@/lib/quizzes";
+import { quizStatus } from "@/lib/quizzes";
 import { formatDeadline } from "@/lib/format";
+
+const STATUS_LABEL = { open: "Open", "not-started": "Not started", closed: "Closed" } as const;
+const STATUS_VARIANT = { open: "brand", "not-started": "warning", closed: "neutral" } as const;
 
 export default function QuizzesPage() {
   const { quizzes, responses, groups } = useQuizStore();
@@ -39,7 +42,7 @@ export default function QuizzesPage() {
           <tbody>
             {quizzes.map((quiz) => {
               const count = responses.filter((r) => r.quizId === quiz.id).length;
-              const closed = !isQuizOpen(quiz, groups);
+              const status = quizStatus(quiz, groups);
               return (
                 <tr key={quiz.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                   <td className="px-5 py-4">
@@ -57,9 +60,7 @@ export default function QuizzesPage() {
                   <td className="px-5 py-4 text-slate-500 tabular-nums">{quiz.questions.length}</td>
                   <td className="px-5 py-4 text-slate-500 tabular-nums">{count}</td>
                   <td className="px-5 py-4">
-                    <Badge variant={closed ? "neutral" : "brand"}>
-                      {closed ? "Closed" : "Open"}
-                    </Badge>
+                    <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
                   </td>
                 </tr>
               );
@@ -71,7 +72,7 @@ export default function QuizzesPage() {
         <div className="divide-y divide-slate-50 md:hidden">
           {quizzes.map((quiz) => {
             const count = responses.filter((r) => r.quizId === quiz.id).length;
-            const closed = !isQuizOpen(quiz, groups);
+            const status = quizStatus(quiz, groups);
             return (
               <Link
                 key={quiz.id}
@@ -80,9 +81,7 @@ export default function QuizzesPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <p className="font-medium text-foreground">{quiz.title}</p>
-                  <Badge variant={closed ? "neutral" : "brand"}>
-                    {closed ? "Closed" : "Open"}
-                  </Badge>
+                  <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
                   {quiz.groups.length === 0 ? "All groups" : quiz.groups.join(", ")}

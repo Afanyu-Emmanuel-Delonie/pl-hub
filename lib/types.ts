@@ -64,6 +64,7 @@ export type Quiz = {
   questions: QuizQuestion[];
   closedGroups: Group[]; // groups manually blocked from responding, ahead of the deadline
   createdAt: string;
+  started: boolean; // gate students must wait behind until the TA clicks "Start quiz"
 };
 
 export type QuizResponse = {
@@ -76,6 +77,8 @@ export type QuizResponse = {
   maxScore: number;
   submittedAt: string;
   late: boolean;
+  autoSubmitted?: boolean; // ended automatically after excessive tab-switching
+  tabSwitchCount?: number;
 };
 
 export type BonusAward = {

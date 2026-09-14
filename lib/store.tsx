@@ -66,6 +66,7 @@ type AppStore = {
   addQuiz: (quiz: Quiz) => Promise<void>;
   updateQuiz: (quiz: Quiz) => Promise<void>;
   deleteQuiz: (id: string) => Promise<void>;
+  startQuiz: (id: string) => Promise<void>;
   endQuiz: (id: string) => Promise<void>;
   reopenQuiz: (id: string) => Promise<void>;
   addQuizResponse: (response: QuizResponse) => Promise<void>;
@@ -133,6 +134,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const addQuiz = useCallback((quiz: Quiz) => createQuiz(quiz), []);
   const updateQuiz = useCallback((quiz: Quiz) => saveQuiz(quiz), []);
   const deleteQuiz = useCallback((id: string) => removeQuiz(id), []);
+  const startQuiz = useCallback((id: string) => patchQuiz(id, { started: true }), []);
 
   const endQuiz = useCallback(async (id: string) => {
     const quiz = quizzes.find((q) => q.id === id);
@@ -197,7 +199,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       value={{
         quizzes, quizResponses, assignments, submissions, students, bonusAwards,
         attendance, caWeights, groups, loading,
-        addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, addQuizResponse, deleteQuizResponse,
+        addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, addQuizResponse, deleteQuizResponse,
         addAssignment, updateAssignment, deleteAssignment, toggleAssignmentGroup,
         addSubmission, saveGrade, deleteSubmission, addBonusAward,
         setAttendance, saveCAWeights: saveCAWeightsAction,
@@ -217,6 +219,6 @@ export function useStore() {
 
 // backwards-compat alias used by quiz pages
 export function useQuizStore() {
-  const { quizzes, quizResponses: responses, groups, addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useStore();
-  return { quizzes, responses, groups, addQuiz, updateQuiz, deleteQuiz, endQuiz, reopenQuiz, deleteQuizResponse };
+  const { quizzes, quizResponses: responses, groups, addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useStore();
+  return { quizzes, responses, groups, addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse };
 }
