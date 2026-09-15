@@ -11,8 +11,10 @@ import { Input, Label } from "@/components/ui/Field";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Logo } from "@/components/ui/Logo";
-import { isQuizClosedForGroup, isQuizOpen, quizGroups, shuffleQuestions } from "@/lib/quizzes";
+import { isQuizClosedForGroup, quizGroups, quizPhase, shuffleQuestions } from "@/lib/quizzes";
 import { validateName, validateStudentId, validateGroup } from "@/lib/validation";
+import { syncServerTime, trustedNow } from "@/lib/serverTime";
+import { formatKigaliTime } from "@/lib/format";
 import type { Quiz, QuizQuestion } from "@/lib/types";
 
 type Step = "intro" | "answering" | "done";
@@ -59,6 +61,42 @@ function WaitingForStart({ title }: { title: string }) {
   );
 }
 
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+// The automatic-mode counterpart to WaitingForStart — opens and closes on
+// its own timer, so instead of "waiting for your instructor" this tells the
+// student exactly when to come back, using a live countdown once it's close.
+function ScheduledWait({ title, startTime, now }: { title: string; startTime: string; now: number }) {
+  const startMs = new Date(startTime).getTime();
+  const msLeft = startMs - now;
+  const showCountdown = msLeft < 60 * 60_000; // under an hour away
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
+      <div className="relative mx-auto mb-6 flex h-16 w-16 items-center justify-center">
+        <span className="absolute inset-0 animate-ping rounded-full bg-brand-tint" />
+        <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-brand-tint">
+          <Clock className="h-7 w-7 text-brand" />
+        </span>
+      </div>
+      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quiz</p>
+      <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">{title}</h1>
+      <p className="mt-3 text-sm text-slate-500">This quiz opens at {formatKigaliTime(startTime)}</p>
+      {showCountdown && (
+        <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-brand">{formatCountdown(msLeft)}</p>
+      )}
+      <p className="mt-6 text-xs text-slate-400">This page updates automatically — no need to refresh.</p>
+    </div>
+  );
+}
+
 // Doesn't stop a screenshot — nothing rendered by a webpage can — but stamps
 // every question with the student's identity so a leaked screenshot is
 // traceable back to whoever took it. Purely visual: pointer-events-none so
@@ -79,6 +117,84 @@ function Watermark({ text }: { text: string }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ReviewQuestion({ question, index, answer }: { question: QuizQuestion; index: number; answer: Answer | undefined }) {
+  const isGraded = question.type !== "short-answer";
+  const isCorrect = isGraded && scoreAnswer(question, answer) === 1;
+  const chosen = Array.isArray(answer) ? answer : [];
+
+  return (
+    <div className="border-b border-slate-100 px-6 py-5 last:border-b-0">
+      <div className="mb-3 flex items-start gap-3">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
+            !isGraded ? "bg-slate-400" : isCorrect ? "bg-emerald-500" : "bg-rose-500"
+          }`}
+        >
+          {index + 1}
+        </span>
+        <div>
+          <p className="pt-0.5 text-sm font-medium leading-relaxed text-foreground">{question.text}</p>
+          {question.isBonus && (
+            <span className="mt-1.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              Bonus · optional
+            </span>
+          )}
+        </div>
+      </div>
+
+      {question.codeBlock && (
+        <div className="mb-3 ml-10">
+          <CodeBlock code={question.codeBlock.value} label={question.codeBlock.language ?? "SQL"} />
+        </div>
+      )}
+
+      {question.type === "short-answer" ? (
+        <div className="ml-10 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          {typeof answer === "string" && answer.trim() !== "" ? (
+            answer
+          ) : (
+            <span className="italic text-slate-400">No answer given</span>
+          )}
+        </div>
+      ) : (
+        <div className="ml-10 space-y-2">
+          {question.options.map((opt, idx) => {
+            const isCorrectOpt = question.correctIndexes.includes(idx);
+            const wasChosen = chosen.includes(idx);
+            const style = isCorrectOpt
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700 font-medium"
+              : wasChosen
+              ? "border-rose-300 bg-rose-50 text-rose-700"
+              : "border-slate-200 text-slate-500";
+            return (
+              <div key={idx} className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${style}`}>
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${
+                    isCorrectOpt
+                      ? "border-emerald-400 bg-emerald-400 text-white"
+                      : wasChosen
+                      ? "border-rose-400 bg-rose-400 text-white"
+                      : "border-slate-300 text-slate-400"
+                  }`}
+                >
+                  {String.fromCharCode(65 + idx)}
+                </span>
+                <span className="flex-1">{opt}</span>
+                {isCorrectOpt && (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Correct</span>
+                )}
+                {!isCorrectOpt && wasChosen && (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-rose-600">Your answer</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -114,6 +230,9 @@ export default function PublicQuizPage() {
   const [allGroups, setAllGroups] = useState<string[]>([]);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
+  const [autoSubmitReason, setAutoSubmitReason] = useState<"tabswitch" | "time">("tabswitch");
+  const [timeSynced, setTimeSynced] = useState(false);
+  const [clockTick, setClockTick] = useState(0);
   const unsubQuizRef = useRef<(() => void) | null>(null);
   const tabSwitchCountRef = useRef(0);
   const autoSubmitLockRef = useRef(false);
@@ -133,6 +252,25 @@ export default function PublicQuizPage() {
     return subscribeGroups((data) => setAllGroups(data));
   }, []);
 
+  // Automatic-mode open/close runs off a server-synced clock, not the
+  // student's own device clock (which they could set back or forward to
+  // dodge the window or claim extra time). Re-synced periodically in case a
+  // student leaves the waiting screen open for a long time before start.
+  useEffect(() => {
+    let cancelled = false;
+    syncServerTime().then(() => { if (!cancelled) setTimeSynced(true); });
+    const resync = setInterval(syncServerTime, 60_000);
+    return () => { cancelled = true; clearInterval(resync); };
+  }, []);
+
+  // Re-renders once a second so the trusted-time-derived phase (waiting →
+  // open → closed) and the auto-submit check below stay live without a
+  // manual refresh.
+  useEffect(() => {
+    const id = setInterval(() => setClockTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // Anti-cheating: switching away from the tab more than twice while
   // answering auto-submits whatever they've answered so far. Only armed
   // during "answering" — leaving before starting or after submitting
@@ -148,7 +286,7 @@ export default function PublicQuizPage() {
       setTabSwitchCount(count);
       if (count > MAX_TAB_SWITCHES && !autoSubmitLockRef.current) {
         autoSubmitLockRef.current = true;
-        handleSubmit(true, count);
+        handleSubmit(true, count, "tabswitch");
       }
     }
 
@@ -156,6 +294,23 @@ export default function PublicQuizPage() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  // Automatic-mode quizzes close themselves the instant the scheduled window
+  // ends. A student still mid-attempt at that point is auto-submitted with
+  // whatever they've picked so far, same as the tab-switch limit — but a
+  // student who never got past the intro screen is left alone (see the
+  // "after" render branch below), so a no-show isn't recorded as an attempt.
+  // Re-checks every clockTick (every second) since "now" crossing the
+  // window's end isn't itself a state change React would otherwise notice.
+  useEffect(() => {
+    if (!quiz || quiz.scheduleMode !== "automatic") return;
+    if (step !== "answering" || autoSubmitLockRef.current) return;
+    if (quizPhase(quiz, allGroups, trustedNow()) === "after") {
+      autoSubmitLockRef.current = true;
+      handleSubmit(true, tabSwitchCountRef.current, "time");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quiz, allGroups, step, clockTick]);
 
   if (quiz === undefined) {
     return (
@@ -173,9 +328,21 @@ export default function PublicQuizPage() {
     );
   }
 
+  // An automatic-mode quiz's open/close is time-critical, so hold on the
+  // loading screen until the trusted clock offset is known rather than
+  // briefly computing the phase off the student's own (untrusted) clock.
+  if (quiz.scheduleMode === "automatic" && !timeSynced) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-slate-400">Loading…</p>
+      </main>
+    );
+  }
+
+  const nowMs = trustedNow();
   const groups = quizGroups(quiz, allGroups);
-  const quizOpen = isQuizOpen(quiz, allGroups);
-  const groupClosed = group !== "" && isQuizClosedForGroup(quiz, group);
+  const phase = quizPhase(quiz, allGroups, nowMs);
+  const groupClosed = group !== "" && isQuizClosedForGroup(quiz, group, nowMs);
   const question = orderedQuestions[current];
   const totalQ = quiz.questions.length;
   const canAdvance = question && (question.isBonus || isAnswered(question, answers[question.id]));
@@ -213,7 +380,11 @@ export default function PublicQuizPage() {
     setStep("answering");
   }
 
-  async function handleSubmit(auto = false, switchCount = tabSwitchCountRef.current) {
+  async function handleSubmit(
+    auto = false,
+    switchCount = tabSwitchCountRef.current,
+    reason: "tabswitch" | "time" = "tabswitch"
+  ) {
     const regular = quiz!.questions.filter((q) => !q.isBonus);
     const bonus = quiz!.questions.filter((q) => q.isBonus);
     // Bonus questions add to the score as extra credit but never inflate
@@ -237,11 +408,13 @@ export default function PublicQuizPage() {
         late: false,
         autoSubmitted: auto,
         tabSwitchCount: switchCount,
+        ...(auto ? { autoSubmitReason: reason } : {}),
       }),
       upsertStudent({ id: normalizedId, name: studentName, group }),
     ]);
     setResult({ score, maxScore });
     setAutoSubmitted(auto);
+    setAutoSubmitReason(reason);
     setStep("done");
     // No more updates matter to this student once they've submitted — free
     // the connection instead of leaving it open until the tab is closed.
@@ -265,11 +438,17 @@ export default function PublicQuizPage() {
       </header>
 
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-        <div className="w-full max-w-lg">
+        <div className={`w-full ${step === "done" ? "max-w-2xl" : "max-w-lg"}`}>
 
-          {!quiz.started && step !== "done" && <WaitingForStart title={quiz.title} />}
+          {phase === "before" && step !== "done" && (
+            quiz.scheduleMode === "automatic" && quiz.startTime ? (
+              <ScheduledWait title={quiz.title} startTime={quiz.startTime} now={nowMs} />
+            ) : (
+              <WaitingForStart title={quiz.title} />
+            )
+          )}
 
-          {quiz.started && !quizOpen && step !== "done" && (
+          {phase === "after" && step !== "done" && (
             <div className="rounded-xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
                 <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -281,7 +460,7 @@ export default function PublicQuizPage() {
             </div>
           )}
 
-          {quizOpen && step === "intro" && (
+          {phase === "open" && step === "intro" && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-6 py-5">
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Quiz</p>
@@ -324,7 +503,7 @@ export default function PublicQuizPage() {
             </div>
           )}
 
-          {step === "answering" && question && (
+          {step === "answering" && question && phase !== "after" && (
             <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <Watermark text={`${name.trim()} · ${studentId.trim().toUpperCase()}`} />
               <div className="px-6 pt-6">
@@ -426,8 +605,9 @@ export default function PublicQuizPage() {
                 </h2>
                 {autoSubmitted && (
                   <p className="mt-1 text-sm text-slate-500">
-                    You switched away from this tab more than twice, which isn&apos;t allowed
-                    during the quiz — your answers up to that point were submitted for you.
+                    {autoSubmitReason === "time"
+                      ? "Time ran out before you finished — your answers up to that point were submitted for you."
+                      : "You switched away from this tab more than twice, which isn't allowed during the quiz — your answers up to that point were submitted for you."}
                   </p>
                 )}
                 <p className="mt-1 text-sm text-slate-500">
@@ -436,6 +616,18 @@ export default function PublicQuizPage() {
                 </p>
                 <p className="mt-6 text-xs text-slate-400">You can safely close this page.</p>
               </div>
+            </div>
+          )}
+
+          {step === "done" && result && (
+            <div className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-4">
+                <h3 className="text-sm font-semibold text-foreground">Review your answers</h3>
+                <p className="mt-0.5 text-xs text-slate-400">Correct answers are highlighted in green.</p>
+              </div>
+              {orderedQuestions.map((q, idx) => (
+                <ReviewQuestion key={q.id} question={q} index={idx} answer={answers[q.id]} />
+              ))}
             </div>
           )}
         </div>

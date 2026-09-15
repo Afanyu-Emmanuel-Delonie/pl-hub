@@ -25,6 +25,10 @@ export type Assignment = {
   maxScore: number;
   closedGroups: Group[]; // groups manually blocked from submitting, ahead of their deadline
   createdAt: string;
+  // Gates the public /a/[id]/results lookup page — students can't see any
+  // scores until the TA explicitly flips this on, so a partial grading pass
+  // is never visible. Missing/false on older assignments (not yet published).
+  resultsPublished?: boolean;
 };
 
 
@@ -56,6 +60,8 @@ export type QuizQuestion = {
   isBonus?: boolean;        // optional extra-credit question — always shown/ordered last, never required
 };
 
+export type QuizScheduleMode = "manual" | "automatic";
+
 export type Quiz = {
   id: string;
   title: string;
@@ -64,7 +70,13 @@ export type Quiz = {
   questions: QuizQuestion[];
   closedGroups: Group[]; // groups manually blocked from responding, ahead of the deadline
   createdAt: string;
-  started: boolean; // gate students must wait behind until the TA clicks "Start quiz"
+  started: boolean; // manual mode only — gate students wait behind until the TA clicks "Start quiz"
+  // "manual" (default, missing on older quizzes) = today's TA-driven start/end via `started`/`deadline`.
+  // "automatic" = fully clock-driven: opens exactly at `startTime` and closes `durationMinutes` later,
+  // with no TA action at either end — used for timed sittings like the 6:30am slot.
+  scheduleMode?: QuizScheduleMode;
+  startTime?: string; // ISO instant; required when scheduleMode === "automatic"
+  durationMinutes?: number; // required when scheduleMode === "automatic"
 };
 
 export type QuizResponse = {
@@ -77,8 +89,11 @@ export type QuizResponse = {
   maxScore: number;
   submittedAt: string;
   late: boolean;
-  autoSubmitted?: boolean; // ended automatically after excessive tab-switching
+  autoSubmitted?: boolean; // ended automatically without the student pressing submit
   tabSwitchCount?: number;
+  // Why autoSubmitted fired — "tabswitch" (too many tab switches) or "time" (the
+  // scheduled window closed mid-attempt). Absent on older responses (tab-switch).
+  autoSubmitReason?: "tabswitch" | "time";
 };
 
 export type BonusAward = {

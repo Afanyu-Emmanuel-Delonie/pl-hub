@@ -129,6 +129,22 @@ export function subscribeAssignmentSubmissions(
   );
 }
 
+// Scoped to one assignment (rather than reusing subscribeAssignmentSubmissions'
+// whole-collection read) so the public results-lookup page only ever pulls
+// down the one assignment's submissions, not every student's score on
+// every assignment that's ever existed.
+export function subscribeAssignmentSubmissionsForAssignment(
+  assignmentId: string,
+  cb: (submissions: AssignmentSubmission[]) => void,
+  onError?: () => void
+): Unsubscribe {
+  return onSnapshot(
+    query(col("assignmentSubmissions"), where("assignmentId", "==", assignmentId)),
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AssignmentSubmission))),
+    (err) => { logSnapshotError("assignmentSubmissions (single)")(err); onError?.(); }
+  );
+}
+
 export async function submitAssignment(submission: AssignmentSubmission) {
   await setDoc(doc(db, "assignmentSubmissions", submission.id), submission);
 }
