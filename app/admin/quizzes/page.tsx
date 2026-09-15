@@ -32,6 +32,7 @@ export default function QuizzesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <ButtonLink href="/admin/quizzes/archive" variant="secondary">Archived quizzes</ButtonLink>
           <ButtonLink href="/admin/quizzes/import" variant="secondary">Import two-sitting quiz</ButtonLink>
           <ButtonLink href="/admin/quizzes/new">New quiz</ButtonLink>
         </div>

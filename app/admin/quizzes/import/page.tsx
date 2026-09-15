@@ -96,6 +96,10 @@ export default function ImportTwoSittingQuizPage() {
     setCreateError(null);
     try {
       const results: { id: string; title: string }[] = [];
+      // Shared across both sittings created in this batch so the student
+      // page can block someone who already took one sitting from also
+      // taking the other (see Quiz.pairId).
+      const pairId = `pair${Date.now()}`;
       for (let i = 0; i < parsed.length; i++) {
         const set = parsed[i];
         const config = configs[i as 0 | 1];
@@ -112,6 +116,7 @@ export default function ImportTwoSittingQuizPage() {
           createdAt: new Date().toISOString(),
           started: false,
           scheduleMode: config.scheduleMode,
+          pairId,
           ...(config.scheduleMode === "automatic"
             ? { startTime: kigaliInputToISO(config.startInput), durationMinutes: Number(config.durationMinutes) }
             : {}),

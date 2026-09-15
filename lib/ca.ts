@@ -3,6 +3,7 @@ import type {
   AssignmentSubmission,
   CAWeights,
   Quiz,
+  QuizArchiveRecord,
   QuizResponse,
   Student,
 } from "./types";
@@ -29,13 +30,18 @@ export function computeCARow(
   assignments: Assignment[],
   submissions: AssignmentSubmission[],
   quizzes: Quiz[],
-  quizResponses: QuizResponse[]
+  quizResponses: QuizResponse[],
+  // Deleted quizzes' points-possible totals — without these, deleting an old
+  // quiz to free up space would shrink the denominator and retroactively
+  // inflate everyone's quiz percentage. See QuizArchiveRecord.
+  quizArchive: QuizArchiveRecord[] = []
 ): CARow {
   const totalAssignmentMax = assignments.reduce((sum, a) => sum + a.maxScore, 0);
-  const totalQuizMax = quizzes.reduce(
-    (sum, q) => sum + q.questions.reduce((qSum, question) => qSum + question.points, 0),
-    0
-  );
+  const totalQuizMax =
+    quizzes.reduce(
+      (sum, q) => sum + q.questions.reduce((qSum, question) => qSum + question.points, 0),
+      0
+    ) + quizArchive.reduce((sum, a) => sum + a.maxScore, 0);
 
   const earnedAssignment = submissions
     .filter((s) => s.studentId === student.id)

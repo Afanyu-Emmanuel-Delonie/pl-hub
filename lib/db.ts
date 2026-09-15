@@ -20,6 +20,7 @@ import type {
   BonusAward,
   CAWeights,
   Quiz,
+  QuizArchiveRecord,
   QuizResponse,
   Student,
 } from "./types";
@@ -54,14 +55,33 @@ export async function saveQuiz(quiz: Quiz) {
   await setDoc(doc(db, "quizzes", quiz.id), quiz);
 }
 
+// Deliberately does NOT touch quizResponses — those are a student's actual
+// recorded marks and must survive the quiz document being cleared out. See
+// archiveQuiz, which the store calls first so the points-possible total
+// isn't lost along with the quiz.
 export async function removeQuiz(id: string) {
   await deleteDoc(doc(db, "quizzes", id));
-  const snap = await getDocs(query(col("quizResponses"), where("quizId", "==", id)));
-  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
 }
 
 export async function patchQuiz(id: string, patch: Partial<Quiz>) {
   await updateDoc(doc(db, "quizzes", id), patch as Record<string, unknown>);
+}
+
+// ── quiz archive (see QuizArchiveRecord) ──────────────────────────────────────
+
+export function subscribeQuizArchive(
+  cb: (records: QuizArchiveRecord[]) => void,
+  onError?: () => void
+): Unsubscribe {
+  return onSnapshot(
+    query(col("quizArchive"), orderBy("archivedAt", "desc")),
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as QuizArchiveRecord))),
+    (err) => { logSnapshotError("quizArchive")(err); onError?.(); }
+  );
+}
+
+export async function archiveQuiz(record: QuizArchiveRecord) {
+  await setDoc(doc(db, "quizArchive", record.id), record);
 }
 
 // ── quiz responses ────────────────────────────────────────────────────────────
@@ -79,6 +99,15 @@ export function subscribeQuizResponses(
 
 export async function submitQuizResponse(response: QuizResponse) {
   await setDoc(doc(db, "quizResponses", response.id), response);
+}
+
+// One-time (non-subscribed) lookup used by the student quiz page to check,
+// right before letting someone start, whether this student has already
+// submitted this exact quiz or the other sitting of a paired quiz — see
+// `pairId` on Quiz/QuizResponse. Scoped to one student's own responses.
+export async function getStudentQuizResponses(studentId: string): Promise<QuizResponse[]> {
+  const snap = await getDocs(query(col("quizResponses"), where("studentId", "==", studentId)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as QuizResponse));
 }
 
 export async function removeQuizResponse(id: string) {

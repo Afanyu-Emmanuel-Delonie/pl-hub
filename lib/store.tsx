@@ -11,6 +11,7 @@ import {
   subscribeAttendance,
   subscribeCAWeights,
   subscribeGroups,
+  subscribeQuizArchive,
   createGroup,
   updateGroup,
   deleteGroup,
@@ -18,6 +19,7 @@ import {
   createQuiz,
   saveQuiz,
   removeQuiz,
+  archiveQuiz,
   patchQuiz,
   submitQuizResponse,
   removeQuizResponse,
@@ -40,6 +42,7 @@ import type {
   BonusAward,
   CAWeights,
   Quiz,
+  QuizArchiveRecord,
   QuizResponse,
   Student,
 } from "./types";
@@ -48,6 +51,7 @@ type AppStore = {
   // data
   quizzes: Quiz[];
   quizResponses: QuizResponse[];
+  quizArchive: QuizArchiveRecord[];
   assignments: Assignment[];
   submissions: AssignmentSubmission[];
   students: Student[];
@@ -65,7 +69,9 @@ type AppStore = {
   // quiz actions
   addQuiz: (quiz: Quiz) => Promise<void>;
   updateQuiz: (quiz: Quiz) => Promise<void>;
-  deleteQuiz: (id: string) => Promise<void>;
+  // Takes the full quiz (not just its id) — deleting archives its
+  // points-possible total first so CA math survives the quiz being cleared.
+  deleteQuiz: (quiz: Quiz) => Promise<void>;
   startQuiz: (id: string) => Promise<void>;
   endQuiz: (id: string) => Promise<void>;
   reopenQuiz: (id: string) => Promise<void>;
@@ -95,6 +101,7 @@ const StoreContext = createContext<AppStore | null>(null);
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [quizResponses, setQuizResponses] = useState<QuizResponse[]>([]);
+  const [quizArchive, setQuizArchive] = useState<QuizArchiveRecord[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -106,7 +113,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let resolved = 0;
-    const total = 9;
+    const total = 10;
     // Every subscription — success or error — counts toward "loaded", so a
     // denied/broken collection can never leave the dashboard spinning forever.
     function tick() { if (++resolved >= total) setLoading(false); }
@@ -114,6 +121,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const unsubs = [
       subscribeQuizzes((data) => { setQuizzes(data); tick(); }, tick),
       subscribeQuizResponses((data) => { setQuizResponses(data); tick(); }, tick),
+      subscribeQuizArchive((data) => { setQuizArchive(data); tick(); }, tick),
       subscribeAssignments((data) => { setAssignments(data); tick(); }, tick),
       subscribeAssignmentSubmissions((data) => { setSubmissions(data); tick(); }, tick),
       subscribeStudents((data) => { setStudents(data); tick(); }, tick),
@@ -134,7 +142,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // ── quiz actions ────────────────────────────────────────────────────────────
   const addQuiz = useCallback((quiz: Quiz) => createQuiz(quiz), []);
   const updateQuiz = useCallback((quiz: Quiz) => saveQuiz(quiz), []);
-  const deleteQuiz = useCallback((id: string) => removeQuiz(id), []);
+  // Archives the quiz's points-possible total (so CA math keeps working)
+  // before deleting the document itself — quizResponses are left untouched.
+  const deleteQuiz = useCallback(async (quiz: Quiz) => {
+    await archiveQuiz({
+      id: quiz.id,
+      title: quiz.title,
+      groups: quiz.groups,
+      maxScore: quiz.questions.reduce((sum, q) => sum + q.points, 0),
+      createdAt: quiz.createdAt,
+      archivedAt: new Date().toISOString(),
+    });
+    await removeQuiz(quiz.id);
+  }, []);
   const startQuiz = useCallback((id: string) => patchQuiz(id, { started: true }), []);
 
   const endQuiz = useCallback(async (id: string) => {
@@ -203,7 +223,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   return (
     <StoreContext.Provider
       value={{
-        quizzes, quizResponses, assignments, submissions, students, bonusAwards,
+        quizzes, quizResponses, quizArchive, assignments, submissions, students, bonusAwards,
         attendance, caWeights, groups, loading,
         addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, addQuizResponse, deleteQuizResponse,
         addAssignment, updateAssignment, deleteAssignment, toggleAssignmentGroup, setResultsPublished,
@@ -225,6 +245,6 @@ export function useStore() {
 
 // backwards-compat alias used by quiz pages
 export function useQuizStore() {
-  const { quizzes, quizResponses: responses, groups, addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useStore();
-  return { quizzes, responses, groups, addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse };
+  const { quizzes, quizResponses: responses, quizArchive, groups, addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useStore();
+  return { quizzes, responses, quizArchive, groups, addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse };
 }

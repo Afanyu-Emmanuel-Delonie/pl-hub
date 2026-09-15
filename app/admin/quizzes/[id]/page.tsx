@@ -79,7 +79,7 @@ export default function QuizDetailPage() {
   }
 
   function handleDelete() {
-    deleteQuiz(quiz!.id);
+    deleteQuiz(quiz!);
     router.push("/admin/quizzes");
   }
 
@@ -319,8 +319,9 @@ export default function QuizDetailPage() {
       {/* Delete quiz confirm modal */}
       <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete quiz?">
         <p className="text-sm text-slate-600">
-          This permanently deletes &quot;{quiz.title}&quot; and all {results.length} of its
-          responses. This cannot be undone.
+          This removes &quot;{quiz.title}&quot; and its questions. The {results.length} recorded
+          response{results.length !== 1 ? "s" : ""} and this quiz&apos;s points total are kept —
+          safe to do to free up space, and CA scores won&apos;t change. This cannot be undone.
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Cancel</Button>

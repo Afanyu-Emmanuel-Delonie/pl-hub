@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { Clock } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { submitQuizResponse, subscribeGroups, upsertStudent } from "@/lib/db";
+import { getStudentQuizResponses, submitQuizResponse, subscribeGroups, upsertStudent } from "@/lib/db";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { CodeBlock } from "@/components/ui/CodeBlock";
@@ -223,6 +223,8 @@ export default function PublicQuizPage() {
   const [studentId, setStudentId] = useState("");
   const [group, setGroup] = useState("");
   const [errors, setErrors] = useState<{ name?: string; studentId?: string; group?: string }>({});
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [current, setCurrent] = useState(0);
   const [orderedQuestions, setOrderedQuestions] = useState<QuizQuestion[]>([]);
@@ -366,7 +368,7 @@ export default function PublicQuizPage() {
     }
   }
 
-  function handleStart(e: React.FormEvent) {
+  async function handleStart(e: React.FormEvent) {
     e.preventDefault();
     const nextErrors = {
       name: validateName(name) ?? undefined,
@@ -374,7 +376,31 @@ export default function PublicQuizPage() {
       group: groupClosed ? "This group's access is closed." : (validateGroup(group) ?? undefined),
     };
     setErrors(nextErrors);
+    setDuplicateError(null);
     if (Object.values(nextErrors).some(Boolean)) return;
+
+    // Block a repeat attempt: either this exact quiz again, or — for a
+    // two-sitting quiz — the *other* sitting (same pairId). Checked here,
+    // right before entry, rather than only at submit time, so a student
+    // isn't allowed to answer the whole thing before finding out it won't
+    // count.
+    setCheckingDuplicate(true);
+    try {
+      const normalizedId = studentId.trim().toUpperCase();
+      const priorResponses = await getStudentQuizResponses(normalizedId);
+      const sameQuiz = priorResponses.some((r) => r.quizId === quiz!.id);
+      const otherSitting = !sameQuiz && quiz!.pairId && priorResponses.some((r) => r.pairId === quiz!.pairId);
+      if (sameQuiz) {
+        setDuplicateError("You've already completed this quiz — it can only be taken once.");
+        return;
+      }
+      if (otherSitting) {
+        setDuplicateError("You've already completed the other sitting of this quiz — only one sitting is allowed per student.");
+        return;
+      }
+    } finally {
+      setCheckingDuplicate(false);
+    }
 
     setOrderedQuestions(shuffleQuestions(quiz!.questions));
     setStep("answering");
@@ -409,6 +435,7 @@ export default function PublicQuizPage() {
         autoSubmitted: auto,
         tabSwitchCount: switchCount,
         ...(auto ? { autoSubmitReason: reason } : {}),
+        ...(quiz!.pairId ? { pairId: quiz!.pairId } : {}),
       }),
       upsertStudent({ id: normalizedId, name: studentName, group }),
     ]);
@@ -496,8 +523,13 @@ export default function PublicQuizPage() {
                     error={errors.group || (groupClosed ? "This group's access is closed." : undefined)}
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={groupClosed}>
-                  Start quiz →
+                {duplicateError && (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                    {duplicateError}
+                  </p>
+                )}
+                <Button type="submit" className="w-full" disabled={groupClosed || checkingDuplicate}>
+                  {checkingDuplicate ? "Checking…" : "Start quiz →"}
                 </Button>
               </form>
             </div>

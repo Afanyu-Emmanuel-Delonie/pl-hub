@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2, Plus, Check, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Input, Label } from "@/components/ui/Field";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { computeCARow, quizWeight } from "@/lib/ca";
+import { formatDate } from "@/lib/format";
 import type { CAWeights } from "@/lib/types";
 
 function pct(n: number) {
@@ -27,6 +29,7 @@ export default function ProfilePage() {
     submissions,
     quizzes,
     quizResponses,
+    quizArchive,
     groups,
     addGroup,
     renameGroup,
@@ -88,10 +91,35 @@ export default function ProfilePage() {
   const rows = useMemo(
     () =>
       students.map((s) =>
-        computeCARow(s, attendance, weights, assignments, submissions, quizzes, quizResponses)
+        computeCARow(s, attendance, weights, assignments, submissions, quizzes, quizResponses, quizArchive)
       ),
-    [students, attendance, weights, assignments, submissions, quizzes, quizResponses]
+    [students, attendance, weights, assignments, submissions, quizzes, quizResponses, quizArchive]
   );
+
+  // Every quiz that's ever counted toward CA, live or deleted — deleting a
+  // quiz to free up space archives its points-possible total here instead of
+  // losing it, so this list (and the CA percentages above) stay correct no
+  // matter what gets cleaned up. See QuizArchiveRecord.
+  const quizRecordRows = useMemo(() => {
+    const live = quizzes.map((q) => ({
+      id: q.id,
+      title: q.title,
+      groups: q.groups,
+      points: q.questions.reduce((sum, question) => sum + question.points, 0),
+      status: "live" as const,
+      date: q.createdAt,
+    }));
+    const archived = quizArchive.map((a) => ({
+      id: a.id,
+      title: a.title,
+      groups: a.groups,
+      points: a.maxScore,
+      status: "archived" as const,
+      date: a.archivedAt,
+    }));
+    return [...live, ...archived].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [quizzes, quizArchive]);
+  const totalQuizPoints = quizRecordRows.reduce((sum, r) => sum + r.points, 0);
 
   async function handleSaveWeights() {
     await saveCAWeights(weights);
@@ -264,6 +292,68 @@ export default function ProfilePage() {
             <span className="text-xs text-slate-400">Saved</span>
           )}
         </div>
+      </Card>
+
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Quiz points record</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Every quiz counted toward the quiz percentage above, including deleted ones — safe to
+            delete a quiz once you&apos;re done with it; its points stay counted here.
+          </p>
+        </div>
+        <span className="shrink-0 text-xs text-slate-400">{totalQuizPoints} points total</span>
+      </div>
+
+      <Card className="mb-6">
+        {quizRecordRows.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-slate-400">No quizzes recorded yet.</p>
+        ) : (
+          <>
+            <table className="hidden w-full text-left text-sm md:table">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
+                  <th className="px-5 py-3 font-medium">Title</th>
+                  <th className="px-5 py-3 font-medium">Groups</th>
+                  <th className="px-5 py-3 font-medium">Points</th>
+                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quizRecordRows.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-5 py-3 font-medium text-foreground">{r.title}</td>
+                    <td className="px-5 py-3 text-slate-500">{r.groups.length === 0 ? "All groups" : r.groups.join(", ")}</td>
+                    <td className="px-5 py-3 tabular-nums text-slate-500">{r.points}</td>
+                    <td className="px-5 py-3">
+                      <Badge variant={r.status === "live" ? "brand" : "neutral"}>
+                        {r.status === "live" ? "Live" : "Archived"}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3 text-slate-500">{formatDate(r.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="divide-y divide-slate-50 md:hidden">
+              {quizRecordRows.map((r) => (
+                <div key={r.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-medium text-foreground">{r.title}</p>
+                    <Badge variant={r.status === "live" ? "brand" : "neutral"}>
+                      {r.status === "live" ? "Live" : "Archived"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {r.groups.length === 0 ? "All groups" : r.groups.join(", ")} · {r.points} points · {formatDate(r.date)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </Card>
 
       <Card>

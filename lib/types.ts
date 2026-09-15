@@ -77,6 +77,11 @@ export type Quiz = {
   scheduleMode?: QuizScheduleMode;
   startTime?: string; // ISO instant; required when scheduleMode === "automatic"
   durationMinutes?: number; // required when scheduleMode === "automatic"
+  // Shared identifier linking the two sittings of the same two-sitting quiz
+  // (e.g. SET 1 and SET 2 created together via the import page) — lets the
+  // student page block someone who already took one sitting from also
+  // taking the other. Absent on quizzes created singly.
+  pairId?: string;
 };
 
 export type QuizResponse = {
@@ -94,6 +99,25 @@ export type QuizResponse = {
   // Why autoSubmitted fired — "tabswitch" (too many tab switches) or "time" (the
   // scheduled window closed mid-attempt). Absent on older responses (tab-switch).
   autoSubmitReason?: "tabswitch" | "time";
+  // Denormalized from the quiz at submit time so a duplicate-attempt check
+  // can query quizResponses by studentId alone, without first looking up
+  // which quiz ids share a pairId.
+  pairId?: string;
+};
+
+// A slim, permanent record of a quiz's grading-relevant facts, written right
+// before the quiz document itself is deleted. Quiz documents carry the full
+// question list (text, options, code blocks) and are the main thing worth
+// clearing out to save space; QuizResponse docs (the actual marks) are never
+// deleted alongside them. This record is what lets CA math keep using the
+// right "out of how many points" total after the source quiz is gone.
+export type QuizArchiveRecord = {
+  id: string; // same id the quiz document had
+  title: string;
+  groups: Group[];
+  maxScore: number; // sum of question points, frozen at archive time
+  createdAt: string;
+  archivedAt: string;
 };
 
 export type BonusAward = {
