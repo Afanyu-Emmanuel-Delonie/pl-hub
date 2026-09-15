@@ -6,7 +6,15 @@ import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Badge } from "@/components/ui/Badge";
 import { useQuizStore } from "@/lib/store";
 import { quizStatus } from "@/lib/quizzes";
-import { formatDeadline } from "@/lib/format";
+import { formatDeadline, formatKigaliTime } from "@/lib/format";
+import type { Quiz } from "@/lib/types";
+
+function scheduleLabel(quiz: Quiz) {
+  if (quiz.scheduleMode === "automatic" && quiz.startTime && quiz.durationMinutes) {
+    return `${formatKigaliTime(quiz.startTime)} · ${quiz.durationMinutes}m`;
+  }
+  return formatDeadline(quiz.deadline);
+}
 
 const STATUS_LABEL = { open: "Open", "not-started": "Not started", closed: "Closed" } as const;
 const STATUS_VARIANT = { open: "brand", "not-started": "warning", closed: "neutral" } as const;
@@ -23,7 +31,10 @@ export default function QuizzesPage() {
             Create quizzes and review results as they come in.
           </p>
         </div>
-        <ButtonLink href="/admin/quizzes/new">New quiz</ButtonLink>
+        <div className="flex gap-2">
+          <ButtonLink href="/admin/quizzes/import" variant="secondary">Import two-sitting quiz</ButtonLink>
+          <ButtonLink href="/admin/quizzes/new">New quiz</ButtonLink>
+        </div>
       </div>
 
       <Card>
@@ -33,7 +44,7 @@ export default function QuizzesPage() {
             <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
               <th className="px-5 py-3 font-medium">Title</th>
               <th className="px-5 py-3 font-medium">Groups</th>
-              <th className="px-5 py-3 font-medium">Deadline</th>
+              <th className="px-5 py-3 font-medium">Schedule</th>
               <th className="px-5 py-3 font-medium">Questions</th>
               <th className="px-5 py-3 font-medium">Responses</th>
               <th className="px-5 py-3 font-medium">Status</th>
@@ -56,7 +67,7 @@ export default function QuizzesPage() {
                   <td className="px-5 py-4 text-slate-500">
                     {quiz.groups.length === 0 ? "All groups" : quiz.groups.join(", ")}
                   </td>
-                  <td className="px-5 py-4 text-slate-500">{formatDeadline(quiz.deadline)}</td>
+                  <td className="px-5 py-4 text-slate-500">{scheduleLabel(quiz)}</td>
                   <td className="px-5 py-4 text-slate-500 tabular-nums">{quiz.questions.length}</td>
                   <td className="px-5 py-4 text-slate-500 tabular-nums">{count}</td>
                   <td className="px-5 py-4">
@@ -86,7 +97,7 @@ export default function QuizzesPage() {
                 <p className="mt-2 text-xs text-slate-500">
                   {quiz.groups.length === 0 ? "All groups" : quiz.groups.join(", ")}
                   {" · "}
-                  {formatDeadline(quiz.deadline)}
+                  {scheduleLabel(quiz)}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
                   {quiz.questions.length} questions · {count} responses

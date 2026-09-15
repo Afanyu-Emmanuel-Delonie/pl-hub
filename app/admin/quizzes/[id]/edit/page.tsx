@@ -7,9 +7,12 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { GroupPicker } from "@/components/admin/GroupPicker";
+import { QuizScheduleFields } from "@/components/admin/QuizScheduleFields";
+import { QuizImportPanel } from "@/components/admin/QuizImportPanel";
 import { QuestionEditor, emptyQuestion } from "@/components/admin/QuestionEditor";
 import { useQuizStore } from "@/lib/store";
-import type { QuizQuestion } from "@/lib/types";
+import { isoToKigaliInput, kigaliInputToISO } from "@/lib/format";
+import type { QuizQuestion, QuizScheduleMode } from "@/lib/types";
 
 export default function EditQuizPage() {
   const params = useParams<{ id: string }>();
@@ -21,6 +24,11 @@ export default function EditQuizPage() {
 
   const [title, setTitle] = useState(quiz?.title ?? "");
   const [deadline, setDeadline] = useState(quiz?.deadline ?? "");
+  const [scheduleMode, setScheduleMode] = useState<QuizScheduleMode>(quiz?.scheduleMode ?? "manual");
+  const [startInput, setStartInput] = useState(quiz?.startTime ? isoToKigaliInput(quiz.startTime) : "");
+  const [durationMinutes, setDurationMinutes] = useState(
+    quiz?.durationMinutes ? String(quiz.durationMinutes) : ""
+  );
   const [groups, setGroups] = useState<string[]>(quiz?.groups ?? []);
   const [questions, setQuestions] = useState<QuizQuestion[]>(quiz?.questions ?? []);
 
@@ -41,16 +49,44 @@ export default function EditQuizPage() {
     );
   }
 
+  // Switching an automatic quiz to manual: its `deadline` field was never a
+  // real deadline (automatic mode ignores it, so it's just a placeholder set
+  // at creation time) — using it as-is would hand the TA a manual quiz
+  // that's already past its "deadline" the instant they switch. Default to
+  // a week out instead, same as reopening a quiz, whenever the current
+  // value is missing, unparsable, or already in the past.
+  function handleScheduleModeChange(mode: typeof scheduleMode) {
+    setScheduleMode(mode);
+    if (mode !== "manual") return;
+    const current = new Date(deadline).getTime();
+    if (deadline && !Number.isNaN(current) && current > Date.now()) return;
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setDeadline(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+  }
+
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !deadline || questions.length === 0) return;
+    if (!title.trim() || questions.length === 0) return;
+    if (scheduleMode === "manual" && !deadline) return;
+    if (scheduleMode === "automatic" && (!startInput || !durationMinutes)) return;
 
     updateQuiz({
       ...quiz!,
       title: title.trim(),
-      deadline,
+      deadline: scheduleMode === "manual" ? deadline : quiz!.deadline,
       groups,
       questions,
+      scheduleMode,
+      // Firestore's setDoc rejects a field explicitly set to `undefined` —
+      // only include startTime/durationMinutes at all when automatic mode
+      // actually needs them, same as the New/Import quiz pages. A manual
+      // quiz that never had these just keeps not having them (the `...quiz!`
+      // spread above already carries forward whatever, if anything, it had).
+      ...(scheduleMode === "automatic"
+        ? { startTime: kigaliInputToISO(startInput), durationMinutes: Number(durationMinutes) }
+        : {}),
     });
 
     router.push(`/admin/quizzes/${quiz!.id}`);
@@ -78,16 +114,16 @@ export default function EditQuizPage() {
               required
             />
           </div>
-          <div>
-            <Label>Deadline</Label>
-            <Input
-              type="datetime-local"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              className="max-w-xs"
-              required
-            />
-          </div>
+          <QuizScheduleFields
+            scheduleMode={scheduleMode}
+            onScheduleModeChange={handleScheduleModeChange}
+            deadline={deadline}
+            onDeadlineChange={setDeadline}
+            startInput={startInput}
+            onStartInputChange={setStartInput}
+            durationMinutes={durationMinutes}
+            onDurationMinutesChange={setDurationMinutes}
+          />
           <div>
             <Label>Groups <span className="text-slate-400 font-normal">(empty = all groups)</span></Label>
             <GroupPicker selected={groups} onChange={setGroups} />
@@ -98,6 +134,16 @@ export default function EditQuizPage() {
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
             Questions
           </h2>
+          <div className="mb-3">
+            <QuizImportPanel
+              onImport={setQuestions}
+              confirmReplace={(count) =>
+                window.confirm(
+                  `Replace all ${questions.length} existing question(s) with ${count} imported question(s)?`
+                )
+              }
+            />
+          </div>
           <div className="space-y-3">
             {questions.map((q, i) => (
               <QuestionEditor

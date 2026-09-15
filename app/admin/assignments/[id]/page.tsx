@@ -133,7 +133,7 @@ function GradeCard({ submission, onDelete }: { submission: AssignmentSubmission;
 export default function AssignmentDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { assignments, submissions, deleteAssignment, toggleAssignmentGroup, deleteSubmission } = useStore();
+  const { assignments, submissions, deleteAssignment, toggleAssignmentGroup, setResultsPublished, deleteSubmission } = useStore();
   const [tab, setTab] = useState<Tab>("details");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [submissionToDelete, setSubmissionToDelete] = useState<{ id: string; studentName: string } | null>(null);
@@ -214,6 +214,32 @@ export default function AssignmentDetailPage() {
           <Card className="px-5 py-5">
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Share with students</h2>
             <ShareLink path={`/a/${assignment.id}`} />
+          </Card>
+
+          <Card className="px-5 py-5">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Results</h2>
+              <Button
+                size="sm"
+                variant={assignment.resultsPublished ? "secondary" : "primary"}
+                onClick={() => setResultsPublished(assignment.id, !assignment.resultsPublished)}
+              >
+                {assignment.resultsPublished ? "Unpublish" : "Publish results"}
+              </Button>
+            </div>
+            {assignment.resultsPublished ? (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-400">
+                  Live — students can look up their own score by name or Student ID.
+                </p>
+                <ShareLink path={`/a/${assignment.id}/results`} />
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">
+                {graded} of {subs.length} submissions graded. Publish once you&apos;ve finished marking so
+                students can look up their results — nothing is visible to them until you do.
+              </p>
+            )}
           </Card>
 
           <Card className="px-5 py-5">

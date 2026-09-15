@@ -77,6 +77,7 @@ type AppStore = {
   updateAssignment: (assignment: Assignment) => Promise<void>;
   deleteAssignment: (id: string) => Promise<void>;
   toggleAssignmentGroup: (id: string, group: string, closedGroups: string[]) => Promise<void>;
+  setResultsPublished: (id: string, published: boolean) => Promise<void>;
   addSubmission: (submission: AssignmentSubmission) => Promise<void>;
   saveGrade: (id: string, score: number, comment: string) => Promise<void>;
   deleteSubmission: (id: string) => Promise<void>;
@@ -162,6 +163,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const setResultsPublished = useCallback(
+    (id: string, published: boolean) => patchAssignment(id, { resultsPublished: published }),
+    []
+  );
+
   const addSubmission = useCallback((s: AssignmentSubmission) => submitAssignment(s), []);
   const saveGrade = useCallback(
     (id: string, score: number, comment: string) => gradeSubmission(id, score, comment),
@@ -200,7 +206,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         quizzes, quizResponses, assignments, submissions, students, bonusAwards,
         attendance, caWeights, groups, loading,
         addQuiz, updateQuiz, deleteQuiz, startQuiz, endQuiz, reopenQuiz, addQuizResponse, deleteQuizResponse,
-        addAssignment, updateAssignment, deleteAssignment, toggleAssignmentGroup,
+        addAssignment, updateAssignment, deleteAssignment, toggleAssignmentGroup, setResultsPublished,
         addSubmission, saveGrade, deleteSubmission, addBonusAward,
         setAttendance, saveCAWeights: saveCAWeightsAction,
         addGroup, renameGroup, removeGroup,

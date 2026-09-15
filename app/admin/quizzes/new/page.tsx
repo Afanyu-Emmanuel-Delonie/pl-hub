@@ -7,9 +7,12 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { GroupPicker } from "@/components/admin/GroupPicker";
+import { QuizScheduleFields } from "@/components/admin/QuizScheduleFields";
+import { QuizImportPanel } from "@/components/admin/QuizImportPanel";
 import { QuestionEditor, emptyQuestion } from "@/components/admin/QuestionEditor";
 import { useQuizStore } from "@/lib/store";
-import type { Quiz, QuizQuestion } from "@/lib/types";
+import { kigaliInputToISO } from "@/lib/format";
+import type { Quiz, QuizQuestion, QuizScheduleMode } from "@/lib/types";
 
 export default function NewQuizPage() {
   const router = useRouter();
@@ -17,6 +20,9 @@ export default function NewQuizPage() {
 
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [scheduleMode, setScheduleMode] = useState<QuizScheduleMode>("manual");
+  const [startInput, setStartInput] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("");
   const [groups, setGroups] = useState<string[]>([]);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
 
@@ -28,18 +34,27 @@ export default function NewQuizPage() {
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !deadline || questions.length === 0) return;
+    if (!title.trim() || questions.length === 0) return;
+    if (scheduleMode === "manual" && !deadline) return;
+    if (scheduleMode === "automatic" && (!startInput || !durationMinutes)) return;
 
     const id = `q${Date.now()}`;
     const quiz: Quiz = {
       id,
       title: title.trim(),
-      deadline,
+      // Automatic-mode quizzes don't use `deadline`/`started` at all, but a
+      // placeholder deadline keeps older code (and Quiz's required field)
+      // happy without meaning anything for how the quiz actually opens/closes.
+      deadline: scheduleMode === "manual" ? deadline : new Date().toISOString(),
       groups,
       questions,
       closedGroups: [],
       createdAt: new Date().toISOString(),
       started: false,
+      scheduleMode,
+      ...(scheduleMode === "automatic"
+        ? { startTime: kigaliInputToISO(startInput), durationMinutes: Number(durationMinutes) }
+        : {}),
     };
 
     addQuiz(quiz);
@@ -71,17 +86,16 @@ export default function NewQuizPage() {
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Deadline</Label>
-              <Input
-                type="datetime-local"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                required
-              />
-            </div>
-          </div>
+          <QuizScheduleFields
+            scheduleMode={scheduleMode}
+            onScheduleModeChange={setScheduleMode}
+            deadline={deadline}
+            onDeadlineChange={setDeadline}
+            startInput={startInput}
+            onStartInputChange={setStartInput}
+            durationMinutes={durationMinutes}
+            onDurationMinutesChange={setDurationMinutes}
+          />
           <div>
             <Label>Groups <span className="text-slate-400 font-normal">(empty = all groups)</span></Label>
             <GroupPicker selected={groups} onChange={setGroups} />
@@ -90,10 +104,17 @@ export default function NewQuizPage() {
 
         {/* Questions */}
         <div>
-          <div className="mb-3">
+          <div className="mb-3 flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
               Questions
             </h2>
+          </div>
+
+          <div className="mb-3">
+            <QuizImportPanel
+              onImport={setQuestions}
+              onTitleSuggestion={(suggested) => setTitle((t) => (t.trim() ? t : suggested))}
+            />
           </div>
 
           <div className="space-y-3">
