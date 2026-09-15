@@ -17,7 +17,7 @@ import { syncServerTime, trustedNow } from "@/lib/serverTime";
 import { formatKigaliTime } from "@/lib/format";
 import type { Quiz, QuizQuestion } from "@/lib/types";
 
-type Step = "intro" | "answering" | "done";
+type Step = "intro" | "answering" | "done" | "incomplete";
 type Answer = number[] | string;
 
 // Number of tab-switches allowed (with warnings) before the quiz auto-submits.
@@ -302,6 +302,13 @@ export default function PublicQuizPage() {
   // whatever they've picked so far, same as the tab-switch limit — but a
   // student who never got past the intro screen is left alone (see the
   // "after" render branch below), so a no-show isn't recorded as an attempt.
+  //
+  // Sitting 1 of a two-sitting pair is special: if the student got less than
+  // halfway through by the time the window closes, nothing is submitted at
+  // all — no response is recorded, so the pair check doesn't block them from
+  // taking sitting 2 the next morning. More than halfway (or any other quiz)
+  // always submits and is final.
+  //
   // Re-checks every clockTick (every second) since "now" crossing the
   // window's end isn't itself a state change React would otherwise notice.
   useEffect(() => {
@@ -309,7 +316,14 @@ export default function PublicQuizPage() {
     if (step !== "answering" || autoSubmitLockRef.current) return;
     if (quizPhase(quiz, allGroups, trustedNow()) === "after") {
       autoSubmitLockRef.current = true;
-      handleSubmit(true, tabSwitchCountRef.current, "time");
+      const regular = orderedQuestions.filter((q) => !q.isBonus);
+      const answeredCount = regular.filter((q) => isAnswered(q, answers[q.id])).length;
+      const answeredEnough = regular.length === 0 || answeredCount / regular.length > 0.5;
+      if (quiz.pairSitting === 1 && !answeredEnough) {
+        markIncomplete();
+      } else {
+        handleSubmit(true, tabSwitchCountRef.current, "time");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quiz, allGroups, step, clockTick]);
@@ -451,6 +465,13 @@ export default function PublicQuizPage() {
   function handleNext() {
     if (current < totalQ - 1) setCurrent((c) => c + 1);
     else handleSubmit();
+  }
+
+  // Sitting 1 ending with less than half answered: nothing is recorded, so
+  // the student is free to take sitting 2 instead of being locked out by it.
+  function markIncomplete() {
+    setStep("incomplete");
+    unsubQuizRef.current?.();
   }
 
   const scorePct = result && result.maxScore > 0 ? Math.round((result.score / result.maxScore) * 100) : 0;
@@ -621,6 +642,19 @@ export default function PublicQuizPage() {
                   </Button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {step === "incomplete" && (
+            <div className="rounded-xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50">
+                <Clock className="h-6 w-6 text-amber-500" />
+              </div>
+              <h2 className="text-base font-semibold text-foreground">Time ran out</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                You didn&apos;t answer enough of this sitting before it closed, so nothing was
+                submitted. You&apos;ll get another chance at the next sitting.
+              </p>
             </div>
           )}
 
