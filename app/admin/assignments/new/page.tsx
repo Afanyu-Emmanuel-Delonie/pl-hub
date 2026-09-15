@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Textarea } from "@/components/ui/Field";
 import { GroupMultiSelect } from "@/components/admin/GroupMultiSelect";
+import { AssignmentImportPanel } from "@/components/admin/AssignmentImportPanel";
 import { useStore } from "@/lib/store";
 import type { Assignment, ContentBlock, GroupDeadline } from "@/lib/types";
 import { AlignLeft, Code2, HelpCircle, GripVertical, X, Plus } from "lucide-react";
@@ -153,6 +154,17 @@ export default function NewAssignmentPage() {
       </div>
 
       <form onSubmit={handleCreate} className="space-y-6">
+
+        <div>
+          <AssignmentImportPanel
+            onImport={(parsed) => {
+              if (parsed.title) setTitle(parsed.title);
+              if (parsed.maxScore !== undefined) setMaxScore(parsed.maxScore);
+              if (parsed.instructions.length) setInstructions(parsed.instructions);
+              if (parsed.blocks.length) setBlocks(parsed.blocks);
+            }}
+          />
+        </div>
 
         {/* Basics */}
         <Card className="space-y-4 px-5 py-5">
