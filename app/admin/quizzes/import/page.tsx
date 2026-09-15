@@ -117,6 +117,7 @@ export default function ImportTwoSittingQuizPage() {
           started: false,
           scheduleMode: config.scheduleMode,
           pairId,
+          pairSitting: (i === 0 ? 1 : 2) as 1 | 2,
           ...(config.scheduleMode === "automatic"
             ? { startTime: kigaliInputToISO(config.startInput), durationMinutes: Number(config.durationMinutes) }
             : {}),

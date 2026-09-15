@@ -82,6 +82,12 @@ export type Quiz = {
   // student page block someone who already took one sitting from also
   // taking the other. Absent on quizzes created singly.
   pairId?: string;
+  // Which half of the pair this is. Matters because the two sittings behave
+  // differently when the automatic window runs out mid-attempt: sitting 1
+  // only counts (and blocks the other sitting) if the student got more than
+  // halfway through — otherwise it's treated as a no-show and they still get
+  // sitting 2. Sitting 2 is always final, no matter how little was answered.
+  pairSitting?: 1 | 2;
 };
 
 export type QuizResponse = {
