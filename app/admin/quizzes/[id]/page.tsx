@@ -32,6 +32,8 @@ export default function QuizDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [responseToDelete, setResponseToDelete] = useState<{ id: string; studentName: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { quizzes, responses, groups, deleteQuiz, startQuiz, endQuiz, reopenQuiz, deleteQuizResponse } = useQuizStore();
 
   const quiz = useMemo(() => quizzes.find((q) => q.id === params.id), [quizzes, params.id]);
@@ -78,9 +80,17 @@ export default function QuizDetailPage() {
     reopenQuiz(quiz!.id);
   }
 
-  function handleDelete() {
-    deleteQuiz(quiz!);
-    router.push("/admin/quizzes");
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteQuiz(quiz!);
+      router.push("/admin/quizzes");
+    } catch (err) {
+      console.error("Failed to delete quiz:", err);
+      setDeleteError("Couldn't delete this quiz. Please try again.");
+      setDeleting(false);
+    }
   }
 
   function confirmDeleteResponse() {
@@ -317,15 +327,28 @@ export default function QuizDetailPage() {
       </Modal>
 
       {/* Delete quiz confirm modal */}
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete quiz?">
+      <Modal
+        open={deleteOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteOpen(false);
+          setDeleteError(null);
+        }}
+        title="Delete quiz?"
+      >
         <p className="text-sm text-slate-600">
           This removes &quot;{quiz.title}&quot; and its questions. The {results.length} recorded
           response{results.length !== 1 ? "s" : ""} and this quiz&apos;s points total are kept —
           safe to do to free up space, and CA scores won&apos;t change. This cannot be undone.
         </p>
+        {deleteError && <p className="mt-3 text-sm text-red-600">{deleteError}</p>}
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-          <Button variant="danger" onClick={handleDelete}>Delete</Button>
+          <Button variant="secondary" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleDelete} disabled={deleting}>
+            {deleting ? "Deleting…" : "Delete"}
+          </Button>
         </div>
       </Modal>
 
