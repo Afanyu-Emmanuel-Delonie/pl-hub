@@ -1,15 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useStore } from "@/lib/store";
 import { isAssignmentOpen } from "@/lib/assignments";
+import { exportMarksXlsx } from "@/lib/excel";
 import { formatDeadline } from "@/lib/format";
 
 export default function AssignmentsPage() {
-  const { assignments, submissions, groups } = useStore();
+  const { assignments, submissions, students, groups } = useStore();
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportMarksXlsx({ assignments, submissions, students, groups, filename: "assignment-marks.xlsx" });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const coversAllGroups = (deadlineGroups: string[]) =>
     groups.length > 0 && deadlineGroups.length >= groups.length;
 
@@ -22,7 +37,12 @@ export default function AssignmentsPage() {
             Post assignments and track submissions across groups.
           </p>
         </div>
-        <ButtonLink href="/admin/assignments/new">New assignment</ButtonLink>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={handleExport} disabled={exporting || assignments.length === 0}>
+            <Download className="h-4 w-4" /> {exporting ? "Exporting…" : "Export marks"}
+          </Button>
+          <ButtonLink href="/admin/assignments/new">New assignment</ButtonLink>
+        </div>
       </div>
 
       <Card>
@@ -58,6 +78,7 @@ export default function AssignmentsPage() {
                   </td>
                   <td className="px-5 py-4 text-slate-500 tabular-nums">
                     {graded}/{subs.length} graded
+                    {subs.length > graded && <span className="ml-2 text-amber-600">{subs.length - graded} left</span>}
                   </td>
                   <td className="px-5 py-4">
                     <Badge variant={open ? "brand" : "neutral"}>{open ? "Open" : "Closed"}</Badge>
@@ -88,7 +109,10 @@ export default function AssignmentsPage() {
                     </p>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-slate-400">{graded}/{subs.length} graded</p>
+                <p className="mt-2 text-xs text-slate-400">
+                  {graded}/{subs.length} graded
+                  {subs.length > graded && <span className="ml-2 text-amber-600">{subs.length - graded} left</span>}
+                </p>
               </Link>
             );
           })}

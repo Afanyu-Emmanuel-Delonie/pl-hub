@@ -3,21 +3,23 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Download, MessageSquare, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Field";
+import { Input, Textarea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { ShareLink } from "@/components/ui/ShareLink";
 import { AssignmentBody } from "@/components/shared/AssignmentBody";
 import { useStore } from "@/lib/store";
 import { coveredGroups, deadlineForGroup, isAssignmentOpen, isClosedForGroup } from "@/lib/assignments";
 import { exportAssignmentPdf } from "@/lib/pdf";
+import { exportMarksXlsx } from "@/lib/excel";
 import type { AssignmentSubmission } from "@/lib/types";
 import { formatDate, formatDeadline, isPast } from "@/lib/format";
 
 type Tab = "details" | "submissions";
+type StatusFilter = "all" | "remaining" | "completed";
 
 function GradeRow({ submission, onDelete }: { submission: AssignmentSubmission; onDelete: () => void }) {
   const { saveGrade } = useStore();
@@ -83,12 +85,25 @@ function GradeCard({ submission, onDelete }: { submission: AssignmentSubmission;
   const [comment, setComment] = useState(submission.comment);
   const [saved, setSaved] = useState(submission.graded);
   const [saving, setSaving] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [draft, setDraft] = useState(comment);
 
-  async function handleSave() {
+  async function persist(nextComment: string) {
     setSaving(true);
-    await saveGrade(submission.id, Number(score), comment);
+    await saveGrade(submission.id, Number(score), nextComment);
+    setComment(nextComment);
     setSaved(true);
     setSaving(false);
+  }
+
+  function openMore() {
+    setDraft(comment);
+    setMoreOpen(true);
+  }
+
+  async function handleSaveComment() {
+    await persist(draft);
+    setMoreOpen(false);
   }
 
   return (
@@ -98,34 +113,46 @@ function GradeCard({ submission, onDelete }: { submission: AssignmentSubmission;
           <p className="font-medium text-foreground">{submission.studentName}</p>
           <p className="text-xs text-slate-400">{submission.studentId} · {submission.group}</p>
         </div>
-        <div className="flex items-center gap-2">
-          {submission.late && <Badge variant="warning">Late</Badge>}
-          <button type="button" onClick={onDelete} className="text-slate-400 hover:text-red-500" aria-label="Delete submission">
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        {submission.late && <Badge variant="warning">Late</Badge>}
       </div>
       <a href={submission.githubLink} target="_blank" rel="noreferrer"
         className="mt-2 block break-all font-mono text-xs text-brand hover:underline">
         {submission.githubLink.replace("https://", "")}
       </a>
       <p className="mt-1 text-xs text-slate-400">{formatDate(submission.submittedAt)}</p>
-      <div className="mt-3 flex items-center gap-1.5">
+      <div className="mt-3 flex items-center gap-2">
         <Input type="number" min={0} max={submission.maxScore} value={score} placeholder="—"
           onChange={(e) => { setScore(e.target.value); setSaved(false); }} className="w-16 text-center tabular-nums" />
         <span className="text-xs text-slate-400">/ {submission.maxScore}</span>
-      </div>
-      <Input value={comment} onChange={(e) => { setComment(e.target.value); setSaved(false); }}
-        placeholder="Optional comment" className="mt-2" />
-      <div className="mt-3 text-right">
-        {saved ? (
-          <span className="text-xs font-medium text-slate-400">Saved</span>
-        ) : (
-          <Button size="sm" onClick={handleSave} disabled={saving || score === ""}>
-            {saving ? "…" : "Save"}
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={openMore} aria-label="Comment or delete">
+            <MessageSquare className="h-4 w-4" />
+            {comment ? "Comment" : "More"}
+            {comment && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
           </Button>
-        )}
+          {saved ? (
+            <span className="w-10 text-right text-xs font-medium text-slate-400">Saved</span>
+          ) : (
+            <Button size="sm" onClick={() => persist(comment)} disabled={saving || score === ""}>
+              {saving ? "…" : "Save"}
+            </Button>
+          )}
+        </div>
       </div>
+
+      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title={submission.studentName}>
+        <label className="mb-1.5 block text-sm font-medium text-slate-700">Comment</label>
+        <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Optional comment" rows={3} />
+        {score === "" && <p className="mt-1.5 text-xs text-slate-400">Enter a score first — comments are saved together with the score.</p>}
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+          <Button variant="danger" onClick={() => { setMoreOpen(false); onDelete(); }}>
+            <Trash2 className="h-4 w-4" /> Delete submission
+          </Button>
+          <Button onClick={handleSaveComment} disabled={saving || score === ""}>
+            {saving ? "Saving…" : "Save comment"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -133,8 +160,10 @@ function GradeCard({ submission, onDelete }: { submission: AssignmentSubmission;
 export default function AssignmentDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { assignments, submissions, deleteAssignment, toggleAssignmentGroup, setResultsPublished, deleteSubmission } = useStore();
+  const { assignments, submissions, students, groups: allGroups, deleteAssignment, toggleAssignmentGroup, setResultsPublished, deleteSubmission } = useStore();
   const [tab, setTab] = useState<Tab>("details");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [exporting, setExporting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [submissionToDelete, setSubmissionToDelete] = useState<{ id: string; studentName: string } | null>(null);
 
@@ -151,6 +180,8 @@ export default function AssignmentDetailPage() {
   }
 
   const graded = subs.filter((s) => s.graded).length;
+  const remaining = subs.length - graded;
+  const visibleSubs = status === "all" ? subs : subs.filter((s) => (status === "completed") === s.graded);
   const isClosed = !isAssignmentOpen(assignment);
   const groups = coveredGroups(assignment);
 
@@ -159,6 +190,16 @@ export default function AssignmentDetailPage() {
       ? assignment!.closedGroups.filter((g) => g !== group)
       : [...assignment!.closedGroups, group];
     toggleAssignmentGroup(assignment!.id, group, closedGroups);
+  }
+
+  async function handleExportMarks() {
+    setExporting(true);
+    try {
+      const slug = assignment!.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      await exportMarksXlsx({ assignments: [assignment!], submissions: subs, students, groups: allGroups, filename: `${slug}-marks.xlsx` });
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function handleDelete() {
@@ -184,7 +225,7 @@ export default function AssignmentDetailPage() {
             <span>·</span>
             <span>{subs.length} submissions</span>
             <span>·</span>
-            <span>{graded} graded</span>
+            <span>{graded} graded · {remaining} remaining</span>
             <Badge variant={isClosed ? "neutral" : "brand"} dot>{isClosed ? "Closed" : "Open"}</Badge>
           </div>
         </div>
@@ -283,10 +324,44 @@ export default function AssignmentDetailPage() {
         </div>
       )}
 
+      {tab === "submissions" && subs.length > 0 && (
+        <div className="mb-4 space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap gap-2">
+              {([
+                ["all", "All", subs.length],
+                ["remaining", "Remaining", remaining],
+                ["completed", "Completed", graded],
+              ] as [StatusFilter, string, number][]).map(([key, label, count]) => (
+                <button key={key} type="button" onClick={() => setStatus(key)}
+                  className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${status === key ? "border-brand bg-brand-tint text-brand" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+                  {label} <span className="tabular-nums opacity-70">{count}</span>
+                </button>
+              ))}
+            </div>
+            <Button variant="secondary" size="sm" onClick={handleExportMarks} disabled={exporting} className="self-start sm:self-auto">
+              <Download className="h-4 w-4" /> {exporting ? "Exporting…" : "Export marks (Excel)"}
+            </Button>
+          </div>
+          <div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${(graded / subs.length) * 100}%` }} />
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">
+              {remaining === 0 ? "All submissions graded." : `${graded} of ${subs.length} graded — ${remaining} left to mark.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {tab === "submissions" && (
         <Card>
           {subs.length === 0 ? (
             <p className="px-5 py-12 text-center text-sm text-slate-400">No submissions yet.</p>
+          ) : visibleSubs.length === 0 ? (
+            <p className="px-5 py-12 text-center text-sm text-slate-400">
+              {status === "remaining" ? "Nothing left to grade." : "No graded submissions yet."}
+            </p>
           ) : (
             <>
               <div className="hidden overflow-x-auto md:block">
@@ -300,7 +375,7 @@ export default function AssignmentDetailPage() {
                       <th className="px-5 py-3" />
                     </tr>
                   </thead>
-                  <tbody>{subs.map((s) => (
+                  <tbody>{visibleSubs.map((s) => (
                     <GradeRow
                       key={s.id}
                       submission={s}
@@ -310,7 +385,7 @@ export default function AssignmentDetailPage() {
                 </table>
               </div>
               <div className="divide-y divide-slate-50 md:hidden">
-                {subs.map((s) => (
+                {visibleSubs.map((s) => (
                   <GradeCard
                     key={s.id}
                     submission={s}

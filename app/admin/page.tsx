@@ -1,18 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Download } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useStore } from "@/lib/store";
 import { computeLeaderboard } from "@/lib/rankings";
 import { isAssignmentOpen } from "@/lib/assignments";
 import { isQuizOpen } from "@/lib/quizzes";
 import { formatDate } from "@/lib/format";
+import { exportMarksXlsx } from "@/lib/excel";
 
 export default function AdminOverviewPage() {
-  const { assignments, submissions, quizzes, quizResponses, students, bonusAwards, groups, loading } = useStore();
+  const { assignments, submissions, quizzes, quizResponses, quizArchive, students, bonusAwards, groups, loading } = useStore();
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportMarksXlsx({
+        assignments, submissions, quizzes, quizResponses, quizArchive, bonusAwards, students, groups,
+        filename: "all-marks.xlsx",
+      });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const activeAssignments = assignments.filter(isAssignmentOpen).length;
   const activeQuizzes = quizzes.filter((q) => isQuizOpen(q, groups)).length;
@@ -44,11 +60,16 @@ export default function AdminOverviewPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Overview</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Current state of assignments, quizzes, and grading.
-        </p>
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Overview</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Current state of assignments, quizzes, and grading.
+          </p>
+        </div>
+        <Button variant="secondary" onClick={handleExport} disabled={exporting} className="self-start">
+          <Download className="h-4 w-4" /> {exporting ? "Exporting…" : "Export all marks"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
