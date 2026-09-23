@@ -41,7 +41,7 @@ function GradeRow({ submission, onDelete }: { submission: AssignmentSubmission; 
         <p className="font-medium text-foreground">{submission.studentName}</p>
         <p className="text-xs text-slate-400">{submission.studentId} · {submission.group}</p>
       </td>
-      <td className="px-5 py-4">
+      <td className="max-w-[220px] px-5 py-4">
         <a href={submission.githubLink} target="_blank" rel="noreferrer" className="font-mono text-xs text-brand hover:underline break-all">
           {submission.githubLink.replace("https://", "")}
         </a>
@@ -50,11 +50,11 @@ function GradeRow({ submission, onDelete }: { submission: AssignmentSubmission; 
           {submission.late && <span className="ml-2"><Badge variant="warning">Late</Badge></span>}
         </p>
       </td>
-      <td className="px-5 py-4">
+      <td className="whitespace-nowrap px-5 py-4">
         <div className="flex items-center gap-1.5">
           <Input type="number" min={0} max={submission.maxScore} value={score} placeholder="—"
-            onChange={(e) => { setScore(e.target.value); setSaved(false); }} className="w-16 text-center tabular-nums" />
-          <span className="text-xs text-slate-400">/ {submission.maxScore}</span>
+            onChange={(e) => { setScore(e.target.value); setSaved(false); }} className="w-20 shrink-0 text-center tabular-nums" />
+          <span className="whitespace-nowrap text-xs text-slate-400">/ {submission.maxScore}</span>
         </div>
       </td>
       <td className="px-5 py-4">
@@ -122,7 +122,7 @@ function GradeCard({ submission, onDelete }: { submission: AssignmentSubmission;
       <p className="mt-1 text-xs text-slate-400">{formatDate(submission.submittedAt)}</p>
       <div className="mt-3 flex items-center gap-2">
         <Input type="number" min={0} max={submission.maxScore} value={score} placeholder="—"
-          onChange={(e) => { setScore(e.target.value); setSaved(false); }} className="w-16 text-center tabular-nums" />
+          onChange={(e) => { setScore(e.target.value); setSaved(false); }} className="w-20 shrink-0 text-center tabular-nums" />
         <span className="text-xs text-slate-400">/ {submission.maxScore}</span>
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={openMore} aria-label="Comment or delete">
@@ -364,7 +364,7 @@ export default function AssignmentDetailPage() {
             </p>
           ) : (
             <>
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400">
@@ -384,7 +384,7 @@ export default function AssignmentDetailPage() {
                   ))}</tbody>
                 </table>
               </div>
-              <div className="divide-y divide-slate-50 md:hidden">
+              <div className="divide-y divide-slate-50 lg:hidden">
                 {visibleSubs.map((s) => (
                   <GradeCard
                     key={s.id}
